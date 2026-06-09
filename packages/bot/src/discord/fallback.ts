@@ -40,7 +40,7 @@ export async function runFallback(
         context,
       ].join("\n");
 
-      const proc = Bun.spawn(["opencode", "run", "--model", model, prompt], {
+      const proc = Bun.spawn(["opencode", "run", "--model", model, "--dir", repo.path, prompt], {
         cwd: repo.path,
         stdout: "pipe",
         stderr: "pipe",

@@ -251,7 +251,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
     }
 
     const proc = Bun.spawn(
-      ["opencode", "run", "--model", issueModel, prompt],
+      ["opencode", "run", "--model", issueModel, "--dir", repoPath, prompt],
       { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
     );
 
@@ -335,7 +335,7 @@ async function runPlanAgent(
     return { planMd: "# DRY RUN — plan generation skipped", sessionId: `dry-run-${job.id}` };
   }
 
-  return runOpencodeStreaming(job.id, worktreePath, ["opencode", "run", "--agent", "plan", prompt]);
+  return runOpencodeStreaming(job.id, worktreePath, ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt]);
 }
 
 async function runOpencodeStreaming(
@@ -462,6 +462,7 @@ async function waitForApproval(
           "--agent", "plan",
           "--session", currentSession,
           "--continue",
+          "--dir", worktreePath,
           suggestion,
         ],
       );
@@ -521,7 +522,7 @@ async function runBuildAgent(
   }
 
   await runOpencodeStreaming(jobId, worktreePath, [
-    "opencode", "run", "--agent", "build", prompt,
+    "opencode", "run", "--agent", "build", "--dir", worktreePath, prompt,
   ]);
 
   // Create the PR via gh CLI
