@@ -92,25 +92,29 @@ async function handleJob(job: Job) {
       });
     }
 
-    // ── Step 2: Generate GitHub issue ──────────────────────────────────────
-    await client.postStatus.mutate({
-      jobId: job.id,
-      message: "Generating GitHub issue...",
-      level: "info",
-    });
+    // ── Step 2: Use pre-generated issue or generate one ────────────────────
+    let issueNumber = job.issueNumber;
 
-    const issueNumber = await generateIssue(job, repoPath);
-
-    if (issueNumber !== null) {
-      const repoNameWithOwner = dryRun ? "" : await getRepoNameWithOwner(repoPath);
-      const issueUrl = repoNameWithOwner
-        ? `https://github.com/${repoNameWithOwner}/issues/${issueNumber}`
-        : `issue #${issueNumber}`;
+    if (!issueNumber) {
       await client.postStatus.mutate({
         jobId: job.id,
-        message: `Issue created: ${issueUrl}`,
-        level: "success",
+        message: "Generating GitHub issue...",
+        level: "info",
       });
+
+      issueNumber = await generateIssue(job, repoPath);
+
+      if (issueNumber !== null) {
+        const repoNameWithOwner = dryRun ? "" : await getRepoNameWithOwner(repoPath);
+        const issueUrl = repoNameWithOwner
+          ? `https://github.com/${repoNameWithOwner}/issues/${issueNumber}`
+          : `issue #${issueNumber}`;
+        await client.postStatus.mutate({
+          jobId: job.id,
+          message: `Issue created: ${issueUrl}`,
+          level: "success",
+        });
+      }
     }
 
     // ── Step 3: Plan agent ─────────────────────────────────────────────────

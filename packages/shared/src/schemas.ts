@@ -119,11 +119,6 @@ export const PlanReadyOutput = z.object({
   autoApproved: z.boolean().optional(),
 });
 
-export const RenameThreadInput = z.object({
-  jobId: z.number(),
-  newName: z.string(),
-});
-
 export const GetSettingInput = z.object({
   key: z.string(),
 });
