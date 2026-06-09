@@ -124,11 +124,13 @@ export const appRouter = t.router({
       const verboseSetting = await prisma.setting.findUnique({ where: { key: "verbose_mode" } });
       const verbose = verboseSetting?.value !== "off";
 
-      // Always post success/error; only post info when verbose
+      // Always post debug/success/error; only post info when verbose
       if (input.level === "info" && !verbose) return { success: true };
 
       const emoji =
-        input.level === "info" ? "ℹ️" : input.level === "success" ? "✅" : "❌";
+        input.level === "debug" ? "🔍" :
+        input.level === "info" ? "ℹ️" :
+        input.level === "success" ? "✅" : "❌";
       await postToThread(job.threadId, `${emoji} ${input.message}`);
 
       return { success: true };

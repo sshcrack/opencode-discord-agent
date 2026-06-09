@@ -16,7 +16,7 @@ export const JobStatus = z.enum([
 ]);
 export type JobStatus = z.infer<typeof JobStatus>;
 
-export const StatusLevel = z.enum(["info", "success", "error"]);
+export const StatusLevel = z.enum(["debug", "info", "success", "error"]);
 export type StatusLevel = z.infer<typeof StatusLevel>;
 
 export const AutoMode = z.enum(["on", "off"]);

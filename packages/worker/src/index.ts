@@ -13,6 +13,18 @@ const dryRun = DRY_RUN === "true";
 
 if (!SHARED_SECRET) throw new Error("SHARED_SECRET is required");
 
+function timestamp(): string {
+  return new Date().toISOString().slice(11, 23);
+}
+
+function workerLog(...args: any[]) {
+  console.log(`[Worker ${WORKER_ID} ${timestamp()}]`, ...args);
+}
+
+function jobLog(jobId: number, ...args: any[]) {
+  console.log(`[Worker ${WORKER_ID} ${timestamp()}] [Job #${jobId}]`, ...args);
+}
+
 const client = createTRPCClient<AppRouter>({
   links: [
     httpLink({
@@ -21,6 +33,14 @@ const client = createTRPCClient<AppRouter>({
     }),
   ],
 });
+
+async function postDebug(jobId: number, message: string) {
+  await client.postStatus.mutate({ jobId, message, level: "debug" }).catch(() => {});
+}
+
+async function postInfo(jobId: number, message: string) {
+  await client.postStatus.mutate({ jobId, message, level: "info" }).catch(() => {});
+}
 
 // Fetch the issue model from bot settings (no env variable per spec)
 async function getIssueModel(): Promise<string> {
@@ -32,28 +52,30 @@ async function getIssueModel(): Promise<string> {
   }
 }
 
+let activeJobId: number | null = null;
+
 async function poll() {
+  const start = performance.now();
   try {
     const result = await client.pollNextJob.query({ workerId: WORKER_ID });
     if (result) {
-      console.log(`Claimed job #${result.id} for repo ${result.repoSlug}`);
-      // Run async — intentionally not awaited so we don't block the poll interval
+      const elapsed = (performance.now() - start).toFixed(0);
+      workerLog(`Claimed job #${result.id} for repo ${result.repoSlug} (poll took ${elapsed}ms)`);
+      activeJobId = result.id;
       handleJob(result).catch(err =>
-        console.error(`Unhandled job error for #${result.id}:`, err),
+        jobLog(result.id, `Unhandled job error:`, err),
       );
     }
   } catch (err) {
-    console.error("Poll error:", err);
+    workerLog("Poll error:", err);
   }
 }
 
 async function heartbeat() {
   try {
-    // Use getJobStatus with a dummy job id just to update lastSeen. 
-    // Actually we send pollNextJob — but that could claim a job unintentionally
-    // if two calls overlap. Instead we rely on getJobStatus with id=0 which
-    // won't match anything but will update the heartbeat via workerId.
+    const start = performance.now();
     await client.getJobStatus.query({ jobId: 0, workerId: WORKER_ID });
+    workerLog(`Heartbeat OK (${(performance.now() - start).toFixed(0)}ms)`);
   } catch {
     // getJobStatus returns null for missing jobs — heartbeat still recorded
   }
@@ -64,45 +86,49 @@ type Job = NonNullable<Awaited<ReturnType<typeof client.pollNextJob.query>>>;
 async function handleJob(job: Job) {
   const repoPath = job.repoPath;
   if (!repoPath) {
+    jobLog(job.id, `Repository path for ${job.repoSlug} not found — cancelling`);
     await client.postStatus.mutate({
       jobId: job.id,
       message: `Repository path for \`${job.repoSlug}\` not found`,
       level: "error",
     });
     await client.cancelJob.mutate({ jobId: job.id });
+    activeJobId = null;
     return;
   }
 
+  jobLog(job.id, `Starting job for ${job.repoSlug} at ${repoPath} (kind: ${job.kind}, auto: ${job.autoMode}, dryRun: ${dryRun})`);
+  if (job.issueNumber) jobLog(job.id, `Pre-existing issue #${job.issueNumber}`);
+  if (job.context) jobLog(job.id, `Context length: ${job.context.length} chars`);
+
+  const jobStart = performance.now();
+
   try {
     // ── Step 1: Create worktree ────────────────────────────────────────────
-    await client.postStatus.mutate({
-      jobId: job.id,
-      message: "Creating worktree...",
-      level: "info",
-    });
+    jobLog(job.id, "Step 1/5: Creating worktree...");
+    await postInfo(job.id, "Creating worktree...");
 
     const branch = `report-${job.id}-${Date.now().toString(36)}`;
+    jobLog(job.id, `Branch: ${branch}`);
+
+    const stepStart = performance.now();
     const worktreePath = await createWorktree(repoPath, branch, job.id);
+    jobLog(job.id, `Worktree created at ${worktreePath} (${(performance.now() - stepStart).toFixed(0)}ms)`);
 
     if (!dryRun) {
-      await client.postStatus.mutate({
-        jobId: job.id,
-        message: `Worktree created at \`${worktreePath}\` on branch \`${branch}\``,
-        level: "info",
-      });
+      await postDebug(job.id, `Worktree: \`${worktreePath}\` on branch \`${branch}\``);
     }
 
     // ── Step 2: Use pre-generated issue or generate one ────────────────────
     let issueNumber = job.issueNumber;
 
     if (!issueNumber) {
-      await client.postStatus.mutate({
-        jobId: job.id,
-        message: "Generating GitHub issue...",
-        level: "info",
-      });
+      jobLog(job.id, "Step 2/5: Generating GitHub issue...");
+      await postInfo(job.id, "Generating GitHub issue...");
 
+      const stepStart = performance.now();
       issueNumber = await generateIssue(job, repoPath);
+      jobLog(job.id, `Issue generation completed in ${(performance.now() - stepStart).toFixed(0)}ms, issue #${issueNumber ?? "N/A"}`);
 
       if (issueNumber !== null) {
         await client.setIssueNumber.mutate({ jobId: job.id, issueNumber }).catch(() => {});
@@ -110,6 +136,7 @@ async function handleJob(job: Job) {
         const issueUrl = repoNameWithOwner
           ? `https://github.com/${repoNameWithOwner}/issues/${issueNumber}`
           : `issue #${issueNumber}`;
+        jobLog(job.id, `Issue URL: ${issueUrl}`);
         await client.postStatus.mutate({
           jobId: job.id,
           message: `Issue created: ${issueUrl}`,
@@ -119,44 +146,45 @@ async function handleJob(job: Job) {
     }
 
     // ── Step 3: Plan agent ─────────────────────────────────────────────────
-    await client.postStatus.mutate({
-      jobId: job.id,
-      message: "Planning started — running opencode plan agent...",
-      level: "info",
-    });
+    jobLog(job.id, "Step 3/5: Running plan agent...");
+    await postInfo(job.id, "Planning started — running opencode plan agent...");
 
+    const planStart = performance.now();
     const { planMd, sessionId } = await runPlanAgent(job, worktreePath, issueNumber);
+    jobLog(job.id, `Plan agent completed in ${(performance.now() - planStart).toFixed(0)}ms, session: ${sessionId}, plan length: ${planMd.length} chars`);
 
-    await client.postStatus.mutate({
-      jobId: job.id,
-      message: "Planning complete, posting plan for review...",
-      level: "info",
-    });
+    await postInfo(job.id, "Planning complete, posting plan for review...");
 
+    jobLog(job.id, `Posting plan to Discord thread via planReady...`);
     await client.planReady.mutate({ jobId: job.id, planMd, sessionId });
+    jobLog(job.id, `Plan posted to Discord`);
 
     // ── Step 4: Approval loop ──────────────────────────────────────────────
+    jobLog(job.id, "Step 4/5: Waiting for approval...");
     const finalSessionId = await waitForApproval(job.id, sessionId, worktreePath, job);
     if (finalSessionId === null) {
+      jobLog(job.id, "Job was cancelled by user");
       await client.postStatus.mutate({
         jobId: job.id,
         message: "Job cancelled",
         level: "error",
       });
       cleanupWorktree(worktreePath).catch(() => {});
+      activeJobId = null;
       return;
     }
+    jobLog(job.id, `Approval received, session: ${finalSessionId}`);
 
     // ── Step 5: Build agent ────────────────────────────────────────────────
-    await client.postStatus.mutate({
-      jobId: job.id,
-      message: "Starting build agent...",
-      level: "info",
-    });
+    jobLog(job.id, "Step 5/5: Starting build agent...");
+    await postInfo(job.id, "Starting build agent...");
 
+    const buildStart = performance.now();
     const prUrl = await runBuildAgent(job.id, worktreePath, issueNumber, branch);
+    jobLog(job.id, `Build agent completed in ${(performance.now() - buildStart).toFixed(0)}ms`);
 
     if (prUrl) {
+      jobLog(job.id, `PR created: ${prUrl}`);
       await client.postStatus.mutate({
         jobId: job.id,
         message: `PR created: ${prUrl}`,
@@ -167,38 +195,55 @@ async function handleJob(job: Job) {
         message: "Job complete! 🎉",
         level: "success",
       });
+    } else {
+      jobLog(job.id, `PR creation failed or returned no URL`);
     }
 
     cleanupWorktree(worktreePath).catch(() => {});
   } catch (err: any) {
-    console.error("Job error:", err);
+    const elapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
+    jobLog(job.id, `Job FAILED after ${elapsed}s: ${err?.message ?? String(err)}`);
+    if (err?.stack) jobLog(job.id, `Stack: ${err.stack}`);
+    console.error(err);
     await client.postStatus.mutate({
       jobId: job.id,
       message: `Job failed: ${err?.message ?? String(err)}`,
       level: "error",
     });
   }
+
+  const totalElapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
+  jobLog(job.id, `Job finished in ${totalElapsed}s`);
+  activeJobId = null;
 }
 
 // ── Worktree helpers ─────────────────────────────────────────────────────────
 
 async function createWorktree(repoPath: string, branch: string, jobId: number): Promise<string> {
   if (dryRun) {
-    console.log(`[DRY RUN] gwq add -b ${branch}  (in ${repoPath})`);
-    console.log(`[DRY RUN] gwq get ${branch}`);
-    console.log(`[DRY RUN] Using repo path as worktree (no git worktree created)`);
+    jobLog(jobId, `[DRY RUN] gwq add -b ${branch} (in ${repoPath})`);
+    jobLog(jobId, `[DRY RUN] gwq get ${branch}`);
+    jobLog(jobId, `[DRY RUN] Using repo path as worktree (no git worktree created)`);
     return repoPath;
   }
-  await execCommand("gwq", ["add", "-b", branch], repoPath);
-  const worktreePath = (await execCommand("gwq", ["get", branch], repoPath)).trim();
+  jobLog(jobId, `Running: gwq add -b ${branch} (in ${repoPath})`);
+  const addStart = performance.now();
+  await execCommand("gwq", ["add", "-b", branch], repoPath, jobId);
+  jobLog(jobId, `gwq add OK (${(performance.now() - addStart).toFixed(0)}ms)`);
+
+  jobLog(jobId, `Running: gwq get ${branch}`);
+  const getStart = performance.now();
+  const worktreePath = (await execCommand("gwq", ["get", branch], repoPath, jobId)).trim();
+  jobLog(jobId, `gwq get => ${worktreePath} (${(performance.now() - getStart).toFixed(0)}ms)`);
   return worktreePath;
 }
 
 async function cleanupWorktree(worktreePath: string) {
   try {
-    await execCommand("gwq", ["remove", worktreePath]);
+    jobLog(0, `Cleaning up worktree: ${worktreePath}`);
+    await execCommand("gwq", ["remove", worktreePath], undefined, 0);
   } catch (err) {
-    console.error("Worktree cleanup error:", err);
+    jobLog(0, "Worktree cleanup error:", err);
   }
 }
 
@@ -208,6 +253,7 @@ async function getRepoNameWithOwner(repoPath: string): Promise<string> {
       "gh",
       ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
       repoPath,
+      0,
     );
     return out.trim();
   } catch {
@@ -220,6 +266,8 @@ async function getRepoNameWithOwner(repoPath: string): Promise<string> {
 async function generateIssue(job: Job, repoPath: string): Promise<number | null> {
   try {
     const issueModel = await getIssueModel();
+    jobLog(job.id, `Issue model: ${issueModel}`);
+    jobLog(job.id, `Context available: ${!!job.context}, context length: ${job.context?.length ?? 0} chars`);
 
     const prompt = [
       `Create a well-structured GitHub issue for the following ${job.kind} report.`,
@@ -235,21 +283,19 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
       ...(job.context ? [`\nDiscord thread context:\n${job.context}`] : []),
     ].join("\n");
 
+    jobLog(job.id, `Issue prompt length: ${prompt.length} chars`);
+
     if (dryRun) {
-      console.log(`[DRY RUN] Job #${job.id} — 🐛 Issue generation`);
-      console.log(`[DRY RUN] Model: ${issueModel}`);
-      console.log("[DRY RUN] Prompt:");
-      console.log(prompt);
-      console.log("[DRY RUN] Would run: opencode run --model", issueModel, "--print ...");
-      console.log("[DRY RUN] Would run: gh issue create --title ... --body ...");
-      await client.postStatus.mutate({
-        jobId: job.id,
-        message: `[DRY RUN] Issue generation skipped — prompt logged to worker console`,
-        level: "info",
-      });
+      jobLog(job.id, `[DRY RUN] 🐛 Issue generation`);
+      jobLog(job.id, `[DRY RUN] Model: ${issueModel}`);
+      jobLog(job.id, `[DRY RUN] Would run: opencode run --model ${issueModel} --print ...`);
+      jobLog(job.id, `[DRY RUN] Would run: gh issue create --title ... --body ...`);
+      await postInfo(job.id, `[DRY RUN] Issue generation skipped — prompt logged to worker console`);
       return null;
     }
 
+    const runStart = performance.now();
+    jobLog(job.id, `Spawning: opencode run --model ${issueModel} --dir ${repoPath} [${prompt.length} chars]`);
     const proc = Bun.spawn(
       ["opencode", "run", "--model", issueModel, "--dir", repoPath, prompt],
       { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
@@ -257,9 +303,11 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
 
     const output = await new Response(proc.stdout).text();
     const exitCode = await proc.exited;
+    jobLog(job.id, `opencode issue gen finished: exit ${exitCode}, output ${output.length} chars (${(performance.now() - runStart).toFixed(0)}ms)`);
 
     if (exitCode !== 0) {
       const stderr = await new Response(proc.stderr).text();
+      jobLog(job.id, `Issue generation stderr: ${stderr.slice(0, 300)}`);
       await client.postStatus.mutate({
         jobId: job.id,
         message: `Issue generation failed (exit ${exitCode}): ${stderr.slice(0, 300)}`,
@@ -275,6 +323,9 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
       lines.slice(1).join("\n").trim() ||
       `Automated ${job.kind} report for ${job.repoSlug}`;
 
+    jobLog(job.id, `Issue title: ${title.slice(0, 80)}${title.length > 80 ? "..." : ""}`);
+    jobLog(job.id, `Issue body length: ${body.length} chars`);
+
     const repoNameWithOwner = await getRepoNameWithOwner(repoPath);
     const ghArgs = [
       "issue", "create",
@@ -283,6 +334,8 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
       ...(repoNameWithOwner ? ["--repo", repoNameWithOwner] : []),
     ];
 
+    jobLog(job.id, `Spawning: gh ${ghArgs.join(" ")}`);
+    const ghStart = performance.now();
     const ghProc = Bun.spawn(["gh", ...ghArgs], {
       cwd: repoPath,
       stdout: "pipe",
@@ -291,15 +344,21 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
 
     const ghOutput = await new Response(ghProc.stdout).text();
     const ghExit = await ghProc.exited;
+    jobLog(job.id, `gh issue create finished: exit ${ghExit}, output: ${ghOutput.trim()} (${(performance.now() - ghStart).toFixed(0)}ms)`);
 
     if (ghExit === 0) {
       const match = ghOutput.trim().match(/\/(\d+)$/);
-      if (match && match[1]) return parseInt(match[1]);
+      if (match && match[1]) {
+        const num = parseInt(match[1]);
+        jobLog(job.id, `Created issue #${num}: ${ghOutput.trim()}`);
+        return num;
+      }
     }
 
+    jobLog(job.id, `gh issue create returned non-zero exit ${ghExit}`);
     return null;
   } catch (err) {
-    console.error("Issue generation error:", err);
+    jobLog(job.id, `Issue generation error:`, err);
     return null;
   }
 }
@@ -322,19 +381,17 @@ async function runPlanAgent(
     contextBlock,
   ].filter(Boolean).join(" ");
 
+  jobLog(job.id, `Plan agent prompt length: ${prompt.length} chars, issueRef: ${!!issueNumber}, contextBlock: ${!!job.context}`);
+
   if (dryRun) {
-    console.log(`[DRY RUN] Job #${job.id} — 📋 Plan agent`);
-    console.log("[DRY RUN] Prompt:");
-    console.log(prompt);
-    console.log("[DRY RUN] Would run: opencode run --agent plan --print ...");
-    await client.postStatus.mutate({
-      jobId: job.id,
-      message: `[DRY RUN] Plan agent skipped — prompt logged to worker console`,
-      level: "info",
-    });
+    jobLog(job.id, `[DRY RUN] 📋 Plan agent`);
+    jobLog(job.id, `[DRY RUN] Prompt: ${prompt.slice(0, 200)}...`);
+    jobLog(job.id, `[DRY RUN] Would run: opencode run --agent plan --print ...`);
+    await postInfo(job.id, `[DRY RUN] Plan agent skipped — prompt logged to worker console`);
     return { planMd: "# DRY RUN — plan generation skipped", sessionId: `dry-run-${job.id}` };
   }
 
+  jobLog(job.id, `Starting opencode plan agent in ${worktreePath}`);
   return runOpencodeStreaming(job.id, worktreePath, ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt]);
 }
 
@@ -344,6 +401,8 @@ async function runOpencodeStreaming(
   argv: string[],
   extraArgs: string[] = [],
 ): Promise<{ planMd: string; sessionId: string }> {
+  jobLog(jobId, `Spawning: ${argv.join(" ")} ${extraArgs.join(" ")}`);
+
   const proc = Bun.spawn([...argv, ...extraArgs], {
     cwd,
     stdout: "pipe",
@@ -352,9 +411,12 @@ async function runOpencodeStreaming(
 
   let sessionId = "";
   let fullOutput = "";
+  let lineCount = 0;
 
   const reader = proc.stdout.getReader();
   const decoder = new TextDecoder();
+
+  const streamStart = performance.now();
 
   try {
     while (true) {
@@ -367,10 +429,14 @@ async function runOpencodeStreaming(
       for (const line of chunk.split("\n")) {
         const trimmed = line.trim();
         if (!trimmed) continue;
+        lineCount++;
 
         // Extract session ID from opencode output (format: "session: <id>" or "session=<id>")
         const sessionMatch = trimmed.match(/\bsession[=:\s]+([a-zA-Z0-9_-]{8,})/i);
-        if (sessionMatch && sessionMatch[1] && !sessionId) sessionId = sessionMatch[1];
+        if (sessionMatch && sessionMatch[1] && !sessionId) {
+          sessionId = sessionMatch[1];
+          jobLog(jobId, `Detected session ID: ${sessionId}`);
+        }
 
         // Post meaningful lines: tool calls, agent steps, file writes, etc.
         // opencode typically prefixes meaningful lines with ▶, ✓, ✗, or timestamps
@@ -392,18 +458,29 @@ async function runOpencodeStreaming(
     reader.releaseLock();
   }
 
+  const elapsed = (performance.now() - streamStart).toFixed(0);
   const exitCode = await proc.exited;
+  jobLog(jobId, `opencode process finished: exit ${exitCode}, ${lineCount} lines in ${elapsed}ms`);
+
   if (exitCode !== 0) {
     const stderr = await new Response(proc.stderr).text();
+    jobLog(jobId, `opencode stderr: ${stderr.slice(0, 500)}`);
     throw new Error(`opencode failed (exit ${exitCode}): ${stderr.slice(0, 500)}`);
   }
 
-  const planMd = await readFile(`${cwd}/PLAN.md`, "utf-8").catch(() => "");
+  jobLog(jobId, `Reading PLAN.md from ${cwd}/PLAN.md`);
+  const planMd = await readFile(`${cwd}/PLAN.md`, "utf-8").catch(() => {
+    jobLog(jobId, `PLAN.md not found, using fullOutput fallback`);
+    return "";
+  });
 
   // Fallback: scan full output for session ID
   if (!sessionId) {
     const m = fullOutput.match(/\bsession[=:\s]+([a-zA-Z0-9_-]{8,})/i);
-    if (m && m[1]) sessionId = m[1];
+    if (m && m[1]) {
+      sessionId = m[1];
+      jobLog(jobId, `Session ID found via fallback scan: ${sessionId}`);
+    }
   }
 
   return { planMd: planMd || fullOutput, sessionId: sessionId || `fallback-${jobId}` };
@@ -411,13 +488,6 @@ async function runOpencodeStreaming(
 
 // ── Approval loop ────────────────────────────────────────────────────────────
 
-/**
- * Polls job status until approved or cancelled.
- * If the user requests changes (status = "planning"), resumes opencode with
- * the suggestion and calls planReady again.
- *
- * Returns the final sessionId to use for the build, or null if cancelled.
- */
 async function waitForApproval(
   jobId: number,
   sessionId: string,
@@ -425,24 +495,43 @@ async function waitForApproval(
   job: Job,
 ): Promise<string | null> {
   let currentSession = sessionId;
+  let pollCount = 0;
+
+  jobLog(jobId, `Entering approval loop, polling every 2s`);
+  await postDebug(jobId, `Waiting for plan approval...`);
 
   while (true) {
     await Bun.sleep(2000);
+    pollCount++;
 
     let current: Awaited<ReturnType<typeof client.getJobStatus.query>>;
     try {
       current = await client.getJobStatus.query({ jobId, workerId: WORKER_ID });
-    } catch {
+    } catch (err) {
+      jobLog(jobId, `Approval poll #${pollCount} failed (network error), retrying`);
       continue;
     }
 
-    if (!current) return null;
+    if (!current) {
+      jobLog(jobId, `Approval poll #${pollCount}: job not found, returning null`);
+      return null;
+    }
 
-    if (current.status === "approved") return currentSession;
-    if (current.status === "cancelled") return null;
+    jobLog(jobId, `Approval poll #${pollCount}: status=${current.status}${current.pendingSuggestion ? `, suggestion="${current.pendingSuggestion}"` : ""}`);
+
+    if (current.status === "approved") {
+      jobLog(jobId, `Approved after ${pollCount} polls`);
+      await postDebug(jobId, `Plan approved after ${pollCount * 2}s`);
+      return currentSession;
+    }
+    if (current.status === "cancelled") {
+      jobLog(jobId, `Cancelled after ${pollCount} polls`);
+      return null;
+    }
 
     if (current.status === "planning" && current.pendingSuggestion) {
       const suggestion = current.pendingSuggestion;
+      jobLog(jobId, `Revising plan with suggestion: "${suggestion}"`);
 
       // Acknowledge so we don't re-process the same suggestion
       await client.ackSuggestion.mutate({ jobId }).catch(() => {});
@@ -454,6 +543,8 @@ async function waitForApproval(
       });
 
       // Resume opencode session with suggestion
+      jobLog(jobId, `Resuming opencode session ${currentSession} with suggestion`);
+      const reviseStart = performance.now();
       const { planMd: newPlan, sessionId: newSession } = await runOpencodeStreaming(
         jobId,
         worktreePath,
@@ -466,15 +557,13 @@ async function waitForApproval(
           suggestion,
         ],
       );
+      jobLog(jobId, `Plan revision completed in ${(performance.now() - reviseStart).toFixed(0)}ms, new session: ${newSession}`);
 
       currentSession = newSession || currentSession;
 
-      await client.postStatus.mutate({
-        jobId,
-        message: "Plan revised, posting updated plan for review...",
-        level: "info",
-      });
+      await postInfo(jobId, "Plan revised, posting updated plan for review...");
 
+      jobLog(jobId, `Posting revised plan via planReady`);
       await client.planReady.mutate({
         jobId,
         planMd: newPlan,
@@ -507,23 +596,23 @@ async function runBuildAgent(
     .filter(Boolean)
     .join(" ");
 
+  jobLog(jobId, `Build prompt: ${prompt.length} chars, issueRef: ${!!issueNumber}`);
+
   if (dryRun) {
-    console.log(`[DRY RUN] Job #${jobId} — 🔧 Build agent`);
-    console.log("[DRY RUN] Prompt:");
-    console.log(prompt);
-    console.log("[DRY RUN] Would run: opencode run --agent build --print ...");
-    console.log(`[DRY RUN] Would run: gh pr create --title "${branch.replace(/-/g, " ")} implementation" --body ...`);
-    await client.postStatus.mutate({
-      jobId,
-      message: `[DRY RUN] Build agent skipped — prompt logged to worker console`,
-      level: "info",
-    });
+    jobLog(jobId, `[DRY RUN] 🔧 Build agent`);
+    jobLog(jobId, `[DRY RUN] Prompt: ${prompt}`);
+    jobLog(jobId, `[DRY RUN] Would run: opencode run --agent build --print ...`);
+    jobLog(jobId, `[DRY RUN] Would run: gh pr create --title "${branch.replace(/-/g, " ")} implementation" --body ...`);
+    await postInfo(jobId, `[DRY RUN] Build agent skipped — prompt logged to worker console`);
     return null;
   }
 
+  jobLog(jobId, `Starting opencode build agent in ${worktreePath}`);
+  const buildStart = performance.now();
   await runOpencodeStreaming(jobId, worktreePath, [
     "opencode", "run", "--agent", "build", "--dir", worktreePath, prompt,
   ]);
+  jobLog(jobId, `Build agent finished in ${(performance.now() - buildStart).toFixed(0)}ms`);
 
   // Create the PR via gh CLI
   const prBody = issueNumber
@@ -532,6 +621,8 @@ async function runBuildAgent(
 
   const prTitle = `${branch.replace(/-/g, " ")} implementation`;
 
+  jobLog(jobId, `Creating PR: gh pr create --title "${prTitle}" --body [${prBody.length} chars]`);
+  const prStart = performance.now();
   const prProc = Bun.spawn(
     ["gh", "pr", "create", "--title", prTitle, "--body", prBody],
     { cwd: worktreePath, stdout: "pipe", stderr: "pipe" },
@@ -539,9 +630,11 @@ async function runBuildAgent(
 
   const prOutput = await new Response(prProc.stdout).text();
   const prExit = await prProc.exited;
+  jobLog(jobId, `gh pr create: exit ${prExit}, output: ${prOutput.trim()} (${(performance.now() - prStart).toFixed(0)}ms)`);
 
   if (prExit !== 0) {
     const prErr = await new Response(prProc.stderr).text();
+    jobLog(jobId, `PR creation stderr: ${prErr.slice(0, 400)}`);
     await client.postStatus.mutate({
       jobId,
       message: `PR creation failed: ${prErr.slice(0, 400)}`,
@@ -550,12 +643,15 @@ async function runBuildAgent(
     return null;
   }
 
+  jobLog(jobId, `PR URL: ${prOutput.trim()}`);
   return prOutput.trim();
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
-function execCommand(cmd: string, args: string[], cwd?: string): Promise<string> {
+function execCommand(cmd: string, args: string[], cwd?: string, jobId?: number): Promise<string> {
+  const jId = jobId ?? 0;
+  jobLog(jId, `exec: ${cmd} ${args.join(" ")}${cwd ? ` (in ${cwd})` : ""}`);
   return new Promise((resolve, reject) => {
     const proc = Bun.spawn([cmd, ...args], {
       cwd,
@@ -568,8 +664,13 @@ function execCommand(cmd: string, args: string[], cwd?: string): Promise<string>
       new Response(proc.stderr).text(),
       proc.exited,
     ]).then(([stdout, stderr, code]) => {
-      if (code === 0) resolve(stdout);
-      else reject(new Error(`${cmd} failed (exit ${code}): ${stderr}`));
+      if (code === 0) {
+        jobLog(jId, `${cmd} OK (${stdout.length} bytes stdout)`);
+        resolve(stdout);
+      } else {
+        jobLog(jId, `${cmd} FAILED (exit ${code}): ${stderr.slice(0, 200)}`);
+        reject(new Error(`${cmd} failed (exit ${code}): ${stderr}`));
+      }
     });
   });
 }
@@ -577,19 +678,21 @@ function execCommand(cmd: string, args: string[], cwd?: string): Promise<string>
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`Worker ${WORKER_ID} starting, polling ${BOT_URL}/trpc every 5s`);
-  if (dryRun) console.log("🧪 DRY RUN MODE — no external commands will be executed");
+  console.log(`╔══════════════════════════════════════════════╗`);
+  console.log(`║  Worker ${WORKER_ID.padEnd(10)}                 ║`);
+  console.log(`║  Polling: ${BOT_URL}/trpc          ║`);
+  console.log(`║  Interval: 5s  |  Heartbeat: 30s            ║`);
+  console.log(`║  Mode: ${dryRun ? "🧪 DRY RUN" : "🔧 LIVE".padEnd(23)}           ║`);
+  console.log(`╚══════════════════════════════════════════════╝`);
 
   // Heartbeat every 30s
   setInterval(() => {
-    heartbeat().catch(err => console.error("Heartbeat error:", err));
+    heartbeat().catch(err => workerLog("Heartbeat error:", err));
   }, 30_000);
 
-  // Poll every 5s — but only claim one job at a time (handleJob is async and
-  // starts processing immediately; if we've already claimed one the next poll
-  // won't find any pending jobs, which is intentional).
+  // Poll every 5s
   setInterval(() => {
-    poll().catch(err => console.error("Poll error:", err));
+    poll().catch(err => workerLog("Poll error:", err));
   }, 5_000);
 }
 
