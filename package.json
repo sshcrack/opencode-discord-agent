@@ -5,6 +5,7 @@
   "workspaces": ["packages/*"],
   "scripts": {
     "dev:bot": "bun run --cwd packages/bot dev",
+    "bot-deploy": "bun run --cwd packages/bot deploy",
     "dev:worker": "bun run --cwd packages/worker dev",
     "db:generate": "bun run --cwd packages/bot db:generate",
     "db:push": "bun run --cwd packages/bot db:push",

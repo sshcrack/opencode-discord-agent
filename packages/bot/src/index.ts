@@ -1,6 +1,6 @@
-import { Client, GatewayIntentBits, Events, ActivityType } from "discord.js";
+import { Client, GatewayIntentBits, Events } from "discord.js";
 import { prisma } from "./db";
-import { commands, handleCommand } from "./discord/commands";
+import { handleCommand } from "./discord/commands";
 import { handleAutocomplete, handleButton } from "./discord/interactions";
 import { createTRPCServer } from "./trpc/server";
 
@@ -21,7 +21,7 @@ function checkAccess(interaction: { guildId: string | null; user?: { id: string 
   return true;
 }
 
-export const client = new Client({
+const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
@@ -29,12 +29,10 @@ export const client = new Client({
   ],
 });
 
+(globalThis as any).__discord_client = client;
+
 client.once(Events.ClientReady, async (c) => {
   console.log(`Logged in as ${c.user.tag}`);
-
-  await c.application.commands.set(commands);
-  console.log(`Registered ${commands.length} slash commands`);
-
   createTRPCServer(parseInt(TRPC_PORT));
 });
 

@@ -101,20 +101,17 @@ export const commands = [
 
 export async function handleCommand(interaction: CommandInteraction) {
   const { commandName } = interaction;
-  console.log("[handleCommand] Dispatching", commandName, "for user", interaction.user.tag);
 
   if (commandName === "repo") await handleRepoCommand(interaction);
   else if (commandName === "create-report") await handleCreateReport(interaction);
   else if (commandName === "submit") await handleSubmit(interaction);
   else if (commandName === "set-auto") await handleSetAuto(interaction);
   else if (commandName === "set-verbose") await handleSetVerbose(interaction);
-  else console.warn("[handleCommand] Unknown command:", commandName);
 }
 
 async function handleRepoCommand(interaction: CommandInteraction) {
   if (!interaction.isChatInputCommand()) return;
   const subcommand = interaction.options.getSubcommand();
-  console.log("[handleRepoCommand] Subcommand:", subcommand);
 
   if (subcommand === "add") {
     const slug = interaction.options.getString("slug", true);
@@ -187,7 +184,6 @@ async function handleCreateReport(interaction: CommandInteraction) {
   if (!interaction.isChatInputCommand()) return;
   const kind = interaction.options.getString("kind", true);
   const repoSlug = interaction.options.getString("repo");
-  console.log("[handleCreateReport] kind:", kind, "repoSlug:", repoSlug);
 
   let slug = repoSlug;
   if (!slug) {
@@ -229,8 +225,6 @@ async function handleCreateReport(interaction: CommandInteraction) {
 
 async function handleSubmit(interaction: CommandInteraction) {
   if (!interaction.isChatInputCommand()) return;
-
-  console.log("[handleSubmit] Channel type:", interaction.channel?.type, "isThread:", !!(interaction.channel as any)?.isThread?.());
 
   const thread = interaction.channel;
   if (!thread?.isThread()) {

@@ -10,17 +10,20 @@
   },
   "scripts": {
     "dev": "bun run --watch src/index.ts",
+    "deploy": "bun run src/deploy-commands.ts",
     "db:generate": "bunx prisma generate",
     "db:push": "bunx prisma db push",
     "db:migrate": "bunx prisma migrate dev",
     "db:studio": "bunx prisma studio"
   },
   "dependencies": {
+    "@discordjs/rest": "^2.6.1",
     "@opencode-discord/shared": "workspace:*",
-    "@prisma/adapter-better-sqlite3": "^7.8.0",
+    "@prisma/adapter-libsql": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@trpc/server": "^11.17.0",
     "@types/bun": "^1.3.14",
+    "discord-api-types": "^0.38.48",
     "discord.js": "^14.26.4",
     "zod": "^4.4.3"
   },

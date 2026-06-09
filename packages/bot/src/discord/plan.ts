@@ -8,7 +8,7 @@ import {
   Message,
 } from "discord.js";
 import { prisma } from "../db";
-import { client } from "..";
+import { getClient } from './helpers';
 
 type TextishChannel = TextChannel | ThreadChannel;
 
@@ -29,7 +29,7 @@ export async function postPlan(
     .setDescription(`\`\`\`markdown\n${planPreview}${truncated}\n\`\`\``)
     .setColor(0x5865f2);
 
-  const ch = asTextish(await client.channels.fetch(job.threadId));
+  const ch = asTextish(await getClient().channels.fetch(job.threadId));
 
   if (job.autoMode) {
     const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
