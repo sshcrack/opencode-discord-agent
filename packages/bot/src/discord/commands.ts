@@ -82,6 +82,19 @@ export const commands = [
           { name: "Off", value: "off" },
         ),
     ),
+  new SlashCommandBuilder()
+    .setName("set-verbose")
+    .setDescription("Toggle verbose status reporting in threads")
+    .addStringOption(o =>
+      o
+        .setName("mode")
+        .setDescription("Verbose mode")
+        .setRequired(true)
+        .addChoices(
+          { name: "On (all steps)", value: "on" },
+          { name: "Off (success/error only)", value: "off" },
+        ),
+    ),
 ];
 
 export async function handleCommand(interaction: CommandInteraction) {
@@ -91,6 +104,7 @@ export async function handleCommand(interaction: CommandInteraction) {
   else if (commandName === "create-report") await handleCreateReport(interaction);
   else if (commandName === "submit") await handleSubmit(interaction);
   else if (commandName === "set-auto") await handleSetAuto(interaction);
+  else if (commandName === "set-verbose") await handleSetVerbose(interaction);
 }
 
 async function handleRepoCommand(interaction: CommandInteraction) {
@@ -117,7 +131,7 @@ async function handleRepoCommand(interaction: CommandInteraction) {
       data: { slug, path, isDefault: repoCount === 0 },
     });
 
-    await interaction.reply(`:white_check_mark: Repository \`${slug}\` added${repo.isDefault ? " (default)" : ""}`);
+    await interaction.reply(`:white_check_mark: Repository \`${slug}\` added${repo.isDefault ? " (set as default)" : ""}`);
   } else if (subcommand === "remove") {
     const slug = interaction.options.getString("slug", true);
     const repo = await prisma.repository.findUnique({ where: { slug } });
@@ -146,7 +160,7 @@ async function handleRepoCommand(interaction: CommandInteraction) {
       return;
     }
 
-    const lines = repos.map(r => `${r.isDefault ? ":star: " : ""}\`${r.slug}\` → \`${r.path}\``);
+    const lines = repos.map(r => `${r.isDefault ? "⭐ " : ""}**${r.slug}** → \`${r.path}\``);
     await interaction.reply(`**Registered repositories:**\n${lines.join("\n")}`);
   } else if (subcommand === "set-default") {
     const slug = interaction.options.getString("slug", true);
@@ -240,16 +254,13 @@ async function handleSubmit(interaction: CommandInteraction) {
     if (fetched.size < 100) break;
   }
 
-  const collectedMessages = messages
+  const context = messages
     .filter(m => !m.author.bot)
-    .map(m => ({
-      author: m.author.tag,
-      content: m.content,
-      attachments: m.attachments.map((a: any) => a.url),
-    }));
-
-  const context = collectedMessages
-    .map(m => `${m.author}: ${m.content}${m.attachments.length ? ` [${m.attachments.join(", ")}]` : ""}`)
+    .map((m: any) => {
+      const attachments = m.attachments.map((a: any) => a.url);
+      return `${m.author.tag}: ${m.content}${attachments.length ? ` [${attachments.join(", ")}]` : ""}`;
+    })
+    .reverse()
     .join("\n");
 
   const job = await prisma.job.create({
@@ -263,7 +274,7 @@ async function handleSubmit(interaction: CommandInteraction) {
   });
 
   await interaction.reply(
-    `:information_source: Job #${job.id} created, waiting for a worker to pick it up...`,
+    `ℹ️ Job #${job.id} created, waiting for a worker to pick it up...`,
   );
 
   const online = await checkWorkerOnline();
@@ -283,4 +294,23 @@ async function handleSetAuto(interaction: CommandInteraction) {
   });
 
   await interaction.reply(`:white_check_mark: Auto-mode set to **${mode}**`);
+}
+
+async function handleSetVerbose(interaction: CommandInteraction) {
+  if (!interaction.isChatInputCommand()) return;
+  const mode = interaction.options.getString("mode", true);
+
+  await prisma.setting.upsert({
+    where: { key: "verbose_mode" },
+    update: { value: mode },
+    create: { key: "verbose_mode", value: mode },
+  });
+
+  await interaction.reply(
+    `:white_check_mark: Verbose mode set to **${mode}** — ${
+      mode === "on"
+        ? "all agent steps will be posted to threads"
+        : "only success/error messages will be posted"
+    }`,
+  );
 }

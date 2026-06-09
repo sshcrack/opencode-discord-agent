@@ -1,6 +1,5 @@
 import { AutocompleteInteraction, ButtonInteraction } from "discord.js";
 import { prisma } from "../db";
-import { postToThread } from "./helpers";
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
   const focused = interaction.options.getFocused().toString().toLowerCase();
@@ -10,7 +9,7 @@ export async function handleAutocomplete(interaction: AutocompleteInteraction) {
   });
 
   await interaction.respond(
-    repos.map(r => ({ name: `${r.slug} (${r.path})`, value: r.slug })),
+    repos.map(r => ({ name: `${r.slug}${r.isDefault ? " (default)" : ""} — ${r.path}`, value: r.slug })),
   );
 }
 
@@ -28,27 +27,27 @@ export async function handleButton(interaction: ButtonInteraction) {
       data: { status: "approved" },
     });
     await interaction.update({
-      content: ":white_check_mark: Plan approved! Proceeding to build...",
+      content: "✅ Plan approved! Proceeding to build...",
       components: [],
       embeds: [],
     });
   } else if (action === "cancel") {
     const job = await prisma.job.findUnique({ where: { id: jobId } });
-    if (job && job.status === "plan_ready") {
+    if (job && (job.status === "plan_ready" || job.status === "planning")) {
       await prisma.job.update({
         where: { id: jobId },
         data: { status: "cancelled" },
       });
     }
-    await interaction.update({ content: ":x: Job cancelled", components: [], embeds: [] });
+    await interaction.update({ content: "❌ Job cancelled", components: [], embeds: [] });
   } else if (action === "suggest") {
     await interaction.update({
-      content: ":pencil: Please reply in this thread with your suggestion for the plan revision.",
+      content: "✏️ Please reply in this thread with your suggestion for the plan revision.",
       components: [],
       embeds: [],
     });
 
-    const filter = (m: any) => m.author.id === interaction.user.id;
+    const filter = (m: any) => !m.author.bot && m.author.id === interaction.user.id;
     const collector = (interaction.channel as any).createMessageCollector({
       filter,
       time: 300_000,
@@ -56,18 +55,23 @@ export async function handleButton(interaction: ButtonInteraction) {
     });
 
     collector.on("collect", async (msg: any) => {
+      const suggestion = msg.content.trim();
+
       await prisma.job.update({
         where: { id: jobId },
-        data: { status: "planning" },
+        data: { status: "planning", pendingSuggestion: suggestion },
       });
+
       await interaction.followUp(
-        `:arrows_counterclockwise: Forwarding suggestion to worker: "${msg.content}"`,
+        `🔄 Forwarding suggestion to worker: "${suggestion}"`,
       );
     });
 
     collector.on("end", (collected: any) => {
       if (collected.size === 0) {
-        interaction.followUp({ content: ":x: No suggestion received", ephemeral: true });
+        interaction
+          .followUp({ content: "⏰ No suggestion received within 5 minutes.", ephemeral: true })
+          .catch(() => {});
       }
     });
   }

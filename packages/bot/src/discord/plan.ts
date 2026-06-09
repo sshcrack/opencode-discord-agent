@@ -5,10 +5,10 @@ import {
   ButtonStyle,
   TextChannel,
   ThreadChannel,
+  Message,
 } from "discord.js";
 import { prisma } from "../db";
-import { postToThread } from "./helpers";
-import { client } from '..';
+import { client } from "..";
 
 type TextishChannel = TextChannel | ThreadChannel;
 
@@ -25,7 +25,7 @@ export async function postPlan(
   const truncated = lines.length > 20 ? `\n\n*...and ${lines.length - 20} more lines*` : "";
 
   const embed = new EmbedBuilder()
-    .setTitle("Planning Complete")
+    .setTitle("📋 Planning Complete")
     .setDescription(`\`\`\`markdown\n${planPreview}${truncated}\n\`\`\``)
     .setColor(0x5865f2);
 
@@ -39,16 +39,24 @@ export async function postPlan(
         .setStyle(ButtonStyle.Danger),
     );
 
-    if (ch) await ch.send({ embeds: [embed], components: [cancelRow] });
+    let countdownMsg: Message | undefined;
+    if (ch) {
+      await ch.send({ embeds: [embed], components: [cancelRow] });
+      countdownMsg = await ch.send("⏳ Auto-approving in **10** seconds... (click Cancel to abort)");
+    }
 
-    for (let i = 10; i > 0; i--) {
+    for (let i = 9; i >= 0; i--) {
       await Bun.sleep(1000);
       const currentJob = await prisma.job.findUnique({ where: { id: job.id } });
-      if (!currentJob || currentJob.status !== "plan_ready") return { success: true };
-      if (ch) {
-        const msgs = await ch.messages.fetch({ limit: 5 });
-        const last = msgs.find(m => m.author.bot && m.content.includes("Auto-approving"));
-        if (last) await last.edit(`:hourglass: Auto-approving in ${i} seconds...`);
+      if (!currentJob || currentJob.status !== "plan_ready") {
+        // Cancelled during countdown
+        if (countdownMsg) await countdownMsg.edit("❌ Auto-approval cancelled.").catch(() => {});
+        return { success: true };
+      }
+      if (countdownMsg) {
+        await countdownMsg
+          .edit(`⏳ Auto-approving in **${i}** seconds... (click Cancel to abort)`)
+          .catch(() => {});
       }
     }
 
@@ -58,7 +66,7 @@ export async function postPlan(
         where: { id: job.id },
         data: { status: "approved" },
       });
-      if (ch) await ch.send(":white_check_mark: Auto-approved, proceeding to build...");
+      if (countdownMsg) await countdownMsg.edit("✅ Auto-approved, proceeding to build...").catch(() => {});
       return { success: true, autoApproved: true };
     }
 

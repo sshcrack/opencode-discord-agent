@@ -49,9 +49,15 @@ export const JobSchema = z.object({
   issueNumber: z.number().nullable(),
   prUrl: z.string().nullable(),
   autoMode: z.boolean(),
+  pendingSuggestion: z.string().nullable(),
 });
 
 export const PollNextJobInput = z.object({
+  workerId: z.string(),
+});
+
+export const GetJobStatusInput = z.object({
+  jobId: z.number(),
   workerId: z.string(),
 });
 
@@ -80,6 +86,10 @@ export const SuggestChangesInput = z.object({
   suggestion: z.string(),
 });
 
+export const AckSuggestionInput = z.object({
+  jobId: z.number(),
+});
+
 export const CreateReportInput = z.object({
   kind: ReportKind,
   repoSlug: z.string(),
@@ -106,4 +116,12 @@ export const StatusResult = z.object({
 export const PlanReadyOutput = z.object({
   success: z.boolean(),
   autoApproved: z.boolean().optional(),
+});
+
+export const GetSettingInput = z.object({
+  key: z.string(),
+});
+
+export const GetSettingOutput = z.object({
+  value: z.string().nullable(),
 });

@@ -28,6 +28,7 @@ model Job {
   id                Int      @id @default(autoincrement())
   threadId          String
   repoSlug          String
+  repoPath          String   @default("")
   kind              String
   status            String   @default("pending")
   workerId          String?
@@ -36,6 +37,7 @@ model Job {
   issueNumber       Int?
   prUrl             String?
   autoMode          Boolean  @default(false)
+  pendingSuggestion String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   thread            ReportThread @relation(fields: [threadId], references: [threadId])
