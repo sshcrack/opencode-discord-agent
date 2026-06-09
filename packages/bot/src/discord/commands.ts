@@ -4,6 +4,8 @@ import {
   CommandInteraction,
   ChannelType,
   TextChannel,
+  Message,
+  Collection,
 } from "discord.js";
 import { prisma } from "../db";
 import { runFallback, checkWorkerOnline } from "./fallback";
@@ -243,21 +245,23 @@ async function handleSubmit(interaction: CommandInteraction) {
   const autoSetting = await prisma.setting.findUnique({ where: { key: "auto_mode" } });
   const autoMode = autoOverride ?? autoSetting?.value === "on";
 
-  const messages: any[] = [];
+  const messages: Message[] = [];
   let lastId: string | undefined;
 
   while (true) {
-    const fetched = await thread.messages.fetch({ limit: 100, ...(lastId ? { before: lastId } : {}) });
+    const fetched: Collection<string, Message> = await thread.messages.fetch({ limit: 100, ...(lastId ? { before: lastId } : {}) });
     if (fetched.size === 0) break;
     messages.push(...fetched.values());
-    lastId = fetched.last()!.id;
+    const last = fetched.last();
+    if (!last) break;
+    lastId = last.id;
     if (fetched.size < 100) break;
   }
 
   const context = messages
     .filter(m => !m.author.bot)
-    .map((m: any) => {
-      const attachments = m.attachments.map((a: any) => a.url);
+    .map(m => {
+      const attachments = m.attachments.map(a => a.url);
       return `${m.author.tag}: ${m.content}${attachments.length ? ` [${attachments.join(", ")}]` : ""}`;
     })
     .reverse()

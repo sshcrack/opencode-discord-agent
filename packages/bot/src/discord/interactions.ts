@@ -1,4 +1,4 @@
-import { AutocompleteInteraction, ButtonInteraction } from "discord.js";
+import { AutocompleteInteraction, ButtonInteraction, Message, Collection } from "discord.js";
 import { prisma } from "../db";
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
@@ -14,7 +14,13 @@ export async function handleAutocomplete(interaction: AutocompleteInteraction) {
 }
 
 export async function handleButton(interaction: ButtonInteraction) {
-  const [action, jobIdStr] = interaction.customId.split(":");
+  const parts = interaction.customId.split(":");
+  const action = parts[0];
+  const jobIdStr = parts[1];
+  if (!action || !jobIdStr) {
+    await interaction.reply({ content: ":x: Invalid custom ID", ephemeral: true });
+    return;
+  }
   const jobId = parseInt(jobIdStr);
   if (isNaN(jobId)) {
     await interaction.reply({ content: ":x: Invalid job ID", ephemeral: true });

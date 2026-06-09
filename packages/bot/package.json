@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "db:generate": "bunx prisma generate",
@@ -12,15 +17,15 @@
   },
   "dependencies": {
     "@opencode-discord/shared": "workspace:*",
-    "@prisma/client": "^6.2.0",
-    "@trpc/server": "^11.0.0",
+    "@prisma/client": "^7.8.0",
+    "@trpc/server": "^11.17.0",
     "@types/bun": "^1.3.14",
-    "discord.js": "^14.18.0",
-    "zod": "^3.24.0"
+    "discord.js": "^14.26.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "prisma": "^6.2.0",
-    "typescript": "^5.7.0"
+    "@types/node": "^25.9.2",
+    "prisma": "^7.8.0",
+    "typescript": "^6.0.3"
   }
 }

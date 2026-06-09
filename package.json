@@ -6,7 +6,14 @@
   "scripts": {
     "dev:bot": "bun run --cwd packages/bot dev",
     "dev:worker": "bun run --cwd packages/worker dev",
-    "build": "bun run build --cwd packages/shared && bun run build --cwd packages/bot && bun run build --cwd packages/worker"
+    "db:generate": "bun run --cwd packages/bot db:generate",
+    "db:push": "bun run --cwd packages/bot db:push",
+    "db:migrate": "bun run --cwd packages/bot db:migrate",
+    "db:studio": "bun run --cwd packages/bot db:studio",
+    "db:seed": "bunx --bun prisma db seed --cwd packages/bot",
+    "db:pull": "bunx --bun prisma db pull --cwd packages/bot",
+    "db:validate": "bunx --bun prisma validate --cwd packages/bot",
+    "db:format": "bunx --bun prisma format --cwd packages/bot"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
