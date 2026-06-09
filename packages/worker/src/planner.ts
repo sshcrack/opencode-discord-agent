@@ -12,8 +12,7 @@ export async function run(
     `User context:`,
     job.payload.context,
     ``,
-    `Write a thorough implementation plan to PLAN.md and then stop.`,
-    `Do not make any code changes.`,
+    `Write a thorough implementation plan to PLAN.md and then stop.`
   ].join("\n");
 
   const stdout = execSync(`opencode run --agent plan ${JSON.stringify(prompt)}`, {

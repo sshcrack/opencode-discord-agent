@@ -52,7 +52,7 @@ async function main() {
   createHTTPServer({
     router: appRouter,
     createContext,
-    basePath: "/trpc",
+    basePath: "/trpc/",
   }).listen(port);
 
   console.log(`tRPC server listening on :${port}/trpc`);
