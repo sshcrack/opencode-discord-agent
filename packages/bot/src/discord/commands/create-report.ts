@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, CommandInteraction, ChannelType, TextChannel } from "discord.js";
+import type { ReportKind } from "../../db/generated/client";
 import { prisma } from "../../db";
 import { Command } from "./Command";
 
@@ -61,7 +62,7 @@ export class CreateReportCommand extends Command {
     });
 
     await prisma.reportThread.create({
-      data: { threadId: thread.id, kind, repoSlug: slug },
+      data: { threadId: thread.id, kind: kind as ReportKind, repoSlug: slug },
     });
 
     await interaction.reply(`:white_check_mark: Report thread created: ${thread}`);

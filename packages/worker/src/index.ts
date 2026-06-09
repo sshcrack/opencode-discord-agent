@@ -220,11 +220,11 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
       `Create a well-structured GitHub issue for the following ${job.kind} report.`,
       `Repository: ${job.repoSlug}`,
       ``,
-      `Output ONLY:`,
+      `# Output ONLY:`,
       `Line 1: Issue title (plain text, no markdown heading prefix)`,
       `Line 2+: Issue body in Markdown`,
       ``,
-      `Report context:`,
+      `## Report context:`,
       `Kind: ${job.kind}`,
       `Repo: ${job.repoSlug}`,
       ...(job.context ? [`\nDiscord thread context:\n${job.context}`] : []),
@@ -289,7 +289,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
 
     if (ghExit === 0) {
       const match = ghOutput.trim().match(/\/(\d+)$/);
-      if (match) return parseInt(match[1]);
+      if (match && match[1]) return parseInt(match[1]);
     }
 
     return null;
@@ -365,7 +365,7 @@ async function runOpencodeStreaming(
 
         // Extract session ID from opencode output (format: "session: <id>" or "session=<id>")
         const sessionMatch = trimmed.match(/\bsession[=:\s]+([a-zA-Z0-9_-]{8,})/i);
-        if (sessionMatch && !sessionId) sessionId = sessionMatch[1];
+        if (sessionMatch && sessionMatch[1] && !sessionId) sessionId = sessionMatch[1];
 
         // Post meaningful lines: tool calls, agent steps, file writes, etc.
         // opencode typically prefixes meaningful lines with ▶, ✓, ✗, or timestamps
@@ -398,7 +398,7 @@ async function runOpencodeStreaming(
   // Fallback: scan full output for session ID
   if (!sessionId) {
     const m = fullOutput.match(/\bsession[=:\s]+([a-zA-Z0-9_-]{8,})/i);
-    if (m) sessionId = m[1];
+    if (m && m[1]) sessionId = m[1];
   }
 
   return { planMd: planMd || fullOutput, sessionId: sessionId || `fallback-${jobId}` };

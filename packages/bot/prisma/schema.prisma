@@ -9,6 +9,25 @@ datasource db {
   provider = "sqlite"
 }
 
+enum ReportKind {
+  bug
+  feature
+  refactor
+  other
+}
+
+enum JobStatus {
+  pending
+  claimed
+  planning
+  plan_ready
+  approved
+  cancelled
+  building
+  done
+  failed
+}
+
 model Repository {
   id        Int      @id @default(autoincrement())
   slug      String   @unique
@@ -18,31 +37,31 @@ model Repository {
 }
 
 model ReportThread {
-  id        Int      @id @default(autoincrement())
-  threadId  String   @unique
-  kind      String
+  id        Int        @id @default(autoincrement())
+  threadId  String     @unique
+  kind      ReportKind
   repoSlug  String
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   jobs      Job[]
 }
 
 model Job {
-  id                Int      @id @default(autoincrement())
+  id                Int        @id @default(autoincrement())
   threadId          String
   repoSlug          String
-  repoPath          String   @default("")
-  kind              String
-  status            String   @default("pending")
+  repoPath          String     @default("")
+  kind              ReportKind
+  status            JobStatus  @default(pending)
   context           String?
   workerId          String?
   planMd            String?
   opencodeSessionId String?
   issueNumber       Int?
   prUrl             String?
-  autoMode          Boolean  @default(false)
+  autoMode          Boolean    @default(false)
   pendingSuggestion String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
   thread            ReportThread @relation(fields: [threadId], references: [threadId])
 }
 

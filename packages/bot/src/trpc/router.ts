@@ -16,17 +16,23 @@ import {
 import { prisma } from "../db";
 import { postToThread } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
-import type { ReportKind } from "@opencode-discord/shared";
 
 const t = initTRPC.create();
 
-function toJobOutput(job: any) {
+async function findFirstJob() {
+  return await prisma.job.findFirst({
+    where: { status: "pending" },
+    orderBy: { createdAt: "asc" }
+  })
+}
+
+function toJobOutput(job: NonNullable<Awaited<ReturnType<typeof findFirstJob>>>) {
   return {
     id: job.id,
     threadId: job.threadId,
     repoSlug: job.repoSlug,
     repoPath: job.repoPath ?? "",
-    kind: job.kind as ReportKind,
+    kind: job.kind,
     status: job.status,
     context: job.context ?? null,
     workerId: job.workerId,
@@ -51,11 +57,7 @@ export const appRouter = t.router({
         create: { key: `worker:${input.workerId}:lastSeen`, value: now.toISOString() },
       });
 
-      const job = await prisma.job.findFirst({
-        where: { status: "pending" },
-        orderBy: { createdAt: "asc" },
-      });
-
+      const job = await findFirstJob();
       if (!job) return null;
 
       // Resolve repo path at claim time and store it on the job
