@@ -9,7 +9,9 @@ import {
 } from "discord.js";
 import { prisma } from "../db";
 import { runFallback, checkWorkerOnline } from "./fallback";
+import { buildContext } from "./context";
 import { existsSync } from "fs";
+import type { Prisma } from '../db/generated/browser';
 
 export const commands = [
   new SlashCommandBuilder()
@@ -130,7 +132,7 @@ async function handleRepoCommand(interaction: CommandInteraction) {
 
     const repoCount = await prisma.repository.count();
     const repo = await prisma.repository.create({
-      data: { slug, path, isDefault: repoCount === 0 },
+      data: { slug, path, isDefault: repoCount === 0 } satisfies Prisma.RepositoryCreateInput,
     });
 
     await interaction.reply(`:white_check_mark: Repository \`${slug}\` added${repo.isDefault ? " (set as default)" : ""}`);
@@ -258,23 +260,16 @@ async function handleSubmit(interaction: CommandInteraction) {
     if (fetched.size < 100) break;
   }
 
-  const context = messages
-    .filter(m => !m.author.bot)
-    .map(m => {
-      const attachments = m.attachments.map(a => a.url);
-      return `${m.author.tag}: ${m.content}${attachments.length ? ` [${attachments.join(", ")}]` : ""}`;
-    })
-    .reverse()
-    .join("\n");
+  const context = await buildContext(messages);
 
   const job = await prisma.job.create({
     data: {
-      threadId: thread.id,
+      thread: { connect: { threadId: thread.id } },
       repoSlug: reportThread.repoSlug,
       kind: reportThread.kind,
       status: "pending",
-      autoMode,
-    },
+      autoMode
+    } satisfies Prisma.JobCreateInput,
   });
 
   await interaction.reply(
@@ -311,10 +306,9 @@ async function handleSetVerbose(interaction: CommandInteraction) {
   });
 
   await interaction.reply(
-    `:white_check_mark: Verbose mode set to **${mode}** — ${
-      mode === "on"
-        ? "all agent steps will be posted to threads"
-        : "only success/error messages will be posted"
+    `:white_check_mark: Verbose mode set to **${mode}** — ${mode === "on"
+      ? "all agent steps will be posted to threads"
+      : "only success/error messages will be posted"
     }`,
   );
 }

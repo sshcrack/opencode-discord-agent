@@ -43,6 +43,7 @@ export const JobSchema = z.object({
   repoPath: z.string(),
   kind: ReportKind,
   status: JobStatus,
+  context: z.string().nullable(),
   workerId: z.string().nullable(),
   planMd: z.string().nullable(),
   opencodeSessionId: z.string().nullable(),

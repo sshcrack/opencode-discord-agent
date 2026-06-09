@@ -33,6 +33,7 @@ model Job {
   repoPath          String   @default("")
   kind              String
   status            String   @default("pending")
+  context           String?
   workerId          String?
   planMd            String?
   opencodeSessionId String?

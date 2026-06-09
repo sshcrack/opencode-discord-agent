@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, CommandInteraction, Message, Collection } from "discord.js";
 import { prisma } from "../../db";
 import { runFallback, checkWorkerOnline } from "../fallback";
+import { buildContext } from "../context";
 import { Command } from "./Command";
 
 export class SubmitCommand extends Command {
@@ -48,14 +49,7 @@ export class SubmitCommand extends Command {
       if (fetched.size < 100) break;
     }
 
-    const context = messages
-      .filter(m => !m.author.bot)
-      .map(m => {
-        const attachments = m.attachments.map(a => a.url);
-        return `${m.author.tag}: ${m.content}${attachments.length ? ` [${attachments.join(", ")}]` : ""}`;
-      })
-      .reverse()
-      .join("\n");
+    const context = await buildContext(messages);
 
     const job = await prisma.job.create({
       data: {
@@ -64,6 +58,7 @@ export class SubmitCommand extends Command {
         kind: reportThread.kind,
         status: "pending",
         autoMode,
+        context,
       },
     });
 

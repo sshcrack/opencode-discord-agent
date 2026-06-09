@@ -28,6 +28,7 @@ function toJobOutput(job: any) {
     repoPath: job.repoPath ?? "",
     kind: job.kind as ReportKind,
     status: job.status,
+    context: job.context ?? null,
     workerId: job.workerId,
     planMd: job.planMd,
     opencodeSessionId: job.opencodeSessionId,

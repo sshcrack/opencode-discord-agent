@@ -6,7 +6,10 @@ const {
   BOT_URL = "http://localhost:3000",
   SHARED_SECRET,
   WORKER_ID = "default",
+  DRY_RUN,
 } = process.env;
+
+const dryRun = DRY_RUN === "true";
 
 if (!SHARED_SECRET) throw new Error("SHARED_SECRET is required");
 
@@ -79,13 +82,15 @@ async function handleJob(job: Job) {
     });
 
     const branch = `report-${job.id}-${Date.now().toString(36)}`;
-    const worktreePath = await createWorktree(repoPath, branch);
+    const worktreePath = await createWorktree(repoPath, branch, job.id);
 
-    await client.postStatus.mutate({
-      jobId: job.id,
-      message: `Worktree created at \`${worktreePath}\` on branch \`${branch}\``,
-      level: "info",
-    });
+    if (!dryRun) {
+      await client.postStatus.mutate({
+        jobId: job.id,
+        message: `Worktree created at \`${worktreePath}\` on branch \`${branch}\``,
+        level: "info",
+      });
+    }
 
     // ── Step 2: Generate GitHub issue ──────────────────────────────────────
     await client.postStatus.mutate({
@@ -97,7 +102,7 @@ async function handleJob(job: Job) {
     const issueNumber = await generateIssue(job, repoPath);
 
     if (issueNumber !== null) {
-      const repoNameWithOwner = await getRepoNameWithOwner(repoPath);
+      const repoNameWithOwner = dryRun ? "" : await getRepoNameWithOwner(repoPath);
       const issueUrl = repoNameWithOwner
         ? `https://github.com/${repoNameWithOwner}/issues/${issueNumber}`
         : `issue #${issueNumber}`;
@@ -172,7 +177,13 @@ async function handleJob(job: Job) {
 
 // ── Worktree helpers ─────────────────────────────────────────────────────────
 
-async function createWorktree(repoPath: string, branch: string): Promise<string> {
+async function createWorktree(repoPath: string, branch: string, jobId: number): Promise<string> {
+  if (dryRun) {
+    console.log(`[DRY RUN] gwq add -b ${branch}  (in ${repoPath})`);
+    console.log(`[DRY RUN] gwq get ${branch}`);
+    console.log(`[DRY RUN] Using repo path as worktree (no git worktree created)`);
+    return repoPath;
+  }
   await execCommand("gwq", ["add", "-b", branch], repoPath);
   const worktreePath = (await execCommand("gwq", ["get", branch], repoPath)).trim();
   return worktreePath;
@@ -216,7 +227,23 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
       `Report context:`,
       `Kind: ${job.kind}`,
       `Repo: ${job.repoSlug}`,
+      ...(job.context ? [`\nDiscord thread context:\n${job.context}`] : []),
     ].join("\n");
+
+    if (dryRun) {
+      console.log(`[DRY RUN] Job #${job.id} — 🐛 Issue generation`);
+      console.log(`[DRY RUN] Model: ${issueModel}`);
+      console.log("[DRY RUN] Prompt:");
+      console.log(prompt);
+      console.log("[DRY RUN] Would run: opencode run --model", issueModel, "--print ...");
+      console.log("[DRY RUN] Would run: gh issue create --title ... --body ...");
+      await client.postStatus.mutate({
+        jobId: job.id,
+        message: `[DRY RUN] Issue generation skipped — prompt logged to worker console`,
+        level: "info",
+      });
+      return null;
+    }
 
     const proc = Bun.spawn(
       ["opencode", "run", "--model", issueModel, "--print", prompt],
@@ -280,11 +307,28 @@ async function runPlanAgent(
   issueNumber: number | null,
 ): Promise<{ planMd: string; sessionId: string }> {
   const issueRef = issueNumber ? ` The related GitHub issue is #${issueNumber}.` : "";
+  const contextBlock = job.context
+    ? `\n\nThe following is the Discord report thread context with file attachments:\n${job.context}`
+    : "";
   const prompt = [
     `You are a planning agent for a ${job.kind} task on repository ${job.repoSlug}.${issueRef}`,
     `Review the codebase and write a detailed implementation plan to PLAN.md at the root of this directory.`,
     `The plan should cover: files to change, approach, and any risk areas.`,
-  ].join(" ");
+    contextBlock,
+  ].filter(Boolean).join(" ");
+
+  if (dryRun) {
+    console.log(`[DRY RUN] Job #${job.id} — 📋 Plan agent`);
+    console.log("[DRY RUN] Prompt:");
+    console.log(prompt);
+    console.log("[DRY RUN] Would run: opencode run --agent plan --print ...");
+    await client.postStatus.mutate({
+      jobId: job.id,
+      message: `[DRY RUN] Plan agent skipped — prompt logged to worker console`,
+      level: "info",
+    });
+    return { planMd: "# DRY RUN — plan generation skipped", sessionId: `dry-run-${job.id}` };
+  }
 
   return runOpencodeStreaming(job.id, worktreePath, ["opencode", "run", "--agent", "plan", "--print", prompt]);
 }
@@ -457,6 +501,20 @@ async function runBuildAgent(
     .filter(Boolean)
     .join(" ");
 
+  if (dryRun) {
+    console.log(`[DRY RUN] Job #${jobId} — 🔧 Build agent`);
+    console.log("[DRY RUN] Prompt:");
+    console.log(prompt);
+    console.log("[DRY RUN] Would run: opencode run --agent build --print ...");
+    console.log(`[DRY RUN] Would run: gh pr create --title "${branch.replace(/-/g, " ")} implementation" --body ...`);
+    await client.postStatus.mutate({
+      jobId,
+      message: `[DRY RUN] Build agent skipped — prompt logged to worker console`,
+      level: "info",
+    });
+    return null;
+  }
+
   await runOpencodeStreaming(jobId, worktreePath, [
     "opencode", "run", "--agent", "build", "--print", prompt,
   ]);
@@ -514,6 +572,7 @@ function execCommand(cmd: string, args: string[], cwd?: string): Promise<string>
 
 async function main() {
   console.log(`Worker ${WORKER_ID} starting, polling ${BOT_URL}/trpc every 5s`);
+  if (dryRun) console.log("🧪 DRY RUN MODE — no external commands will be executed");
 
   // Heartbeat every 30s
   setInterval(() => {
