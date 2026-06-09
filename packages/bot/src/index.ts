@@ -39,8 +39,23 @@ client.once(Events.ClientReady, async (c) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  console.log("[InteractionCreate]", {
+    type: interaction.type,
+    id: interaction.id,
+    user: interaction.user?.tag,
+    userId: interaction.user?.id,
+    guildId: interaction.guildId,
+    channelId: interaction.channelId,
+    isCommand: interaction.isCommand(),
+    isAutocomplete: interaction.isAutocomplete(),
+    isButton: interaction.isButton(),
+    commandName: interaction.isCommand() ? (interaction as any).commandName : undefined,
+    customId: interaction.isButton() ? (interaction as any).customId : undefined,
+  });
+
   try {
     if (!checkAccess(interaction)) {
+      console.log("[Access] Denied for user", interaction.user?.id, "guild", interaction.guildId);
       if (interaction.isRepliable()) {
         await interaction.reply({ content: ":x: You are not authorized to use this bot", ephemeral: true });
       }
@@ -48,10 +63,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isCommand()) {
+      console.log("[Command] Handling", (interaction as any).commandName, "options:", JSON.stringify((interaction as any).options.data));
       await handleCommand(interaction);
     } else if (interaction.isAutocomplete()) {
+      console.log("[Autocomplete] Focused option:", (interaction as any).options.getFocused());
       await handleAutocomplete(interaction);
     } else if (interaction.isButton()) {
+      console.log("[Button] Custom ID:", (interaction as any).customId);
       await handleButton(interaction);
     }
   } catch (err) {

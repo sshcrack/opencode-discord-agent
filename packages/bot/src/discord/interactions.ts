@@ -3,10 +3,13 @@ import { prisma } from "../db";
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
   const focused = interaction.options.getFocused().toString().toLowerCase();
+  console.log("[handleAutocomplete] focused:", focused);
+
   const repos = await prisma.repository.findMany({
     where: { slug: { contains: focused } },
     take: 25,
   });
+  console.log("[handleAutocomplete] found", repos.length, "repos");
 
   await interaction.respond(
     repos.map(r => ({ name: `${r.slug}${r.isDefault ? " (default)" : ""} — ${r.path}`, value: r.slug })),
@@ -14,6 +17,7 @@ export async function handleAutocomplete(interaction: AutocompleteInteraction) {
 }
 
 export async function handleButton(interaction: ButtonInteraction) {
+  console.log("[handleButton] customId:", interaction.customId, "user:", interaction.user.tag);
   const parts = interaction.customId.split(":");
   const action = parts[0];
   const jobIdStr = parts[1];
