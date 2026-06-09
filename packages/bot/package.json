@@ -3,10 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "build": "bun run tsc",
     "db:generate": "bunx prisma generate",
     "db:push": "bunx prisma db push",
     "db:migrate": "bunx prisma migrate dev",

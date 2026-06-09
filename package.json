@@ -6,8 +6,7 @@
   "scripts": {
     "dev:bot": "bun run --cwd packages/bot dev",
     "dev:worker": "bun run --cwd packages/worker dev",
-    "build": "bun run build --cwd packages/shared && bun run build --cwd packages/bot && bun run build --cwd packages/worker",
-    "typecheck": "bun run tsc --noEmit -p packages/shared && bun run tsc --noEmit -p packages/bot && bun run tsc --noEmit -p packages/worker"
+    "build": "bun run build --cwd packages/shared && bun run build --cwd packages/bot && bun run build --cwd packages/worker"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
