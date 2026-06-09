@@ -6,7 +6,7 @@ A Bun monorepo with two packages (`bot`, `worker`) and a `shared` package for ty
 the tRPC router definition. Users file bug reports, feature requests, or general tasks
 via Discord slash commands. A worker script running on a dev laptop claims jobs, plans
 them with an AI agent, waits for approval, then builds and opens a PR. When no worker is
-online the bot falls back to the GitHub-hosted opencode agent.
+online the bot falls back to the GitHub-hosted opencode agent. After being done, create a `README.md` with instructions on how to run the bot and worker
 
 ---
 
@@ -176,31 +176,3 @@ Sets the global default for auto-mode. Stored in the database as a setting.
 - Any approval flow in the fallback path (the fallback is fire-and-forget)
 - Blocking the poll loop while a job is running (the handler runs async; the loop
   awaits it, so only one job runs per worker at a time — this is intentional)
-
----
-
-## Package responsibilities summary
-
-| Package | Owns |
-|---|---|
-| `shared` | Zod schemas, TS types, tRPC router shape |
-| `bot` | Prisma + SQLite, Discord client, tRPC standalone server, slash commands, button interactions, fallback logic |
-| `worker` | tRPC client, poll loop, gwq + opencode + gh orchestration |
-
----
-
-## Implementation order
-
-1. `shared` — zod types and tRPC router definition
-2. `bot` — Prisma schema and migrations
-3. `bot` — tRPC server and queue procedures
-4. `bot` — `/repo` command group
-5. `bot` — `/create-report` and `/submit` commands
-6. `bot` — `/set-auto` command
-7. `bot` — button interaction handler and approval state machine
-8. `bot` — fallback path
-9. `worker` — tRPC client and reporter
-10. `worker` — planner (gwq + opencode plan agent)
-11. `worker` — builder (opencode build agent + gh pr create)
-12. `worker` — handler orchestrator
-13. `worker` — poll loop and heartbeat

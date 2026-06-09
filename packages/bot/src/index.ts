@@ -1,67 +1,65 @@
-import { Client, GatewayIntentBits, REST, Routes } from "discord.js";
-import { createHTTPServer } from "@trpc/server/adapters/standalone";
-import { appRouter, createContext, setDiscordClient } from "./router";
-import { setupInteractions } from "./interactions";
-import { setFallbackClient } from "./fallback";
+import { Client, GatewayIntentBits, Events, ActivityType } from "discord.js";
+import { prisma } from "./db";
+import { commands, handleCommand } from "./discord/commands";
+import { handleAutocomplete, handleButton } from "./discord/interactions";
+import { createTRPCServer } from "./trpc/server";
 
-async function main() {
-  const token = process.env.DISCORD_TOKEN;
-  const clientId = process.env.DISCORD_CLIENT_ID;
-  const guildId = process.env.DISCORD_GUILD_ID;
-  const port = parseInt(process.env.BOT_PORT || "3451", 10);
+const {
+  DISCORD_TOKEN,
+  TRPC_PORT = "3000",
+  SHARED_SECRET,
+  ALLOWED_GUILD_ID,
+  ALLOWED_USER_ID,
+} = process.env;
 
-  if (!token || !clientId) {
-    console.error("Missing DISCORD_TOKEN or DISCORD_CLIENT_ID");
-    process.exit(1);
-  }
+if (!DISCORD_TOKEN) throw new Error("DISCORD_TOKEN is required");
+if (!SHARED_SECRET) throw new Error("SHARED_SECRET is required");
 
-  const client = new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-    ],
-  });
-
-  setDiscordClient(client);
-  setFallbackClient(client);
-  setupInteractions(client);
-
-  // Register slash commands
-  const rest = new REST({ version: "10" }).setToken(token);
-
-  const commands = (
-    await Promise.all([
-      import("./commands/create-report"),
-      import("./commands/submit"),
-      import("./commands/set-auto"),
-      import("./commands/add-repository"),
-      import("./commands/list-repositories"),
-      import("./commands/remove-repository"),
-    ])
-  ).map((mod) => mod.data.toJSON());
-
-  const route = guildId
-    ? Routes.applicationGuildCommands(clientId, guildId)
-    : Routes.applicationCommands(clientId);
-
-  await rest.put(route, { body: commands });
-  console.log(`Registered ${commands.length} slash commands`);
-
-  // tRPC standalone HTTP server
-  createHTTPServer({
-    router: appRouter,
-    createContext,
-    basePath: "/trpc/",
-  }).listen(port);
-
-  console.log(`tRPC server listening on :${port}/trpc`);
-
-  await client.login(token);
-  console.log(`Logged in as ${client.user?.tag}`);
+function checkAccess(interaction: { guildId: string | null; user?: { id: string } }): boolean {
+  if (ALLOWED_GUILD_ID && interaction.guildId !== ALLOWED_GUILD_ID) return false;
+  if (ALLOWED_USER_ID && interaction.user?.id !== ALLOWED_USER_ID) return false;
+  return true;
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
+export const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
 });
+
+client.once(Events.ClientReady, async (c) => {
+  console.log(`Logged in as ${c.user.tag}`);
+
+  await c.application.commands.set(commands);
+  console.log(`Registered ${commands.length} slash commands`);
+
+  createTRPCServer(parseInt(TRPC_PORT));
+});
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  try {
+    if (!checkAccess(interaction)) {
+      if (interaction.isRepliable()) {
+        await interaction.reply({ content: ":x: You are not authorized to use this bot", ephemeral: true });
+      }
+      return;
+    }
+
+    if (interaction.isCommand()) {
+      await handleCommand(interaction);
+    } else if (interaction.isAutocomplete()) {
+      await handleAutocomplete(interaction);
+    } else if (interaction.isButton()) {
+      await handleButton(interaction);
+    }
+  } catch (err) {
+    console.error("Interaction error:", err);
+    if (interaction.isRepliable()) {
+      await interaction.reply({ content: ":x: An error occurred", ephemeral: true }).catch(() => {});
+    }
+  }
+});
+
+client.login(DISCORD_TOKEN);

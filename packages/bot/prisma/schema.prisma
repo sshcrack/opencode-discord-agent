@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Repository {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique
+  path      String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model ReportThread {
+  id        Int      @id @default(autoincrement())
+  threadId  String   @unique
+  kind      String
+  repoSlug  String
+  createdAt DateTime @default(now())
+  jobs      Job[]
+}
+
+model Job {
+  id                Int      @id @default(autoincrement())
+  threadId          String
+  repoSlug          String
+  kind              String
+  status            String   @default("pending")
+  workerId          String?
+  planMd            String?
+  opencodeSessionId String?
+  issueNumber       Int?
+  prUrl             String?
+  autoMode          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  thread            ReportThread @relation(fields: [threadId], references: [threadId])
+}
+
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}

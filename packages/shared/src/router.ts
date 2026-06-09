@@ -1,56 +1,59 @@
 import { initTRPC } from "@trpc/server";
 import {
-  HeartbeatSchema,
-  StatusUpdateSchema,
-  PlanReadySchema,
-  ApprovalSchema,
-  SuggestionSchema,
-  ClaimResponseSchema,
-} from "./types";
+  PollNextJobInput,
+  PlanReadyInput,
+  PostStatusInput,
+  ApproveJobInput,
+  CancelJobInput,
+  SuggestChangesInput,
+  JobSchema,
+  StatusResult,
+} from "./schemas";
 
-export const t = initTRPC.create();
+const t = initTRPC.create();
 
-/**
- * The full tRPC router definition shared by bot (server) and worker (client).
- *
- * All procedures require `Authorization: Bearer <WORKER_SECRET>` via the
- * meta field – each side enforces auth in its own middleware.
- */
-export const trpcRouter = t.router({
-  heartbeat: t.procedure.input(HeartbeatSchema).mutation(async ({ input }) => {
-    return { ok: true };
-  }),
-
+export const appRouter = t.router({
   pollNextJob: t.procedure
-    .input(HeartbeatSchema)
-    .output(ClaimResponseSchema)
+    .input(PollNextJobInput)
+    .output(JobSchema.nullable())
     .query(async ({ input }) => {
-      return { job: null };
-    }),
-
-  postStatus: t.procedure
-    .input(StatusUpdateSchema)
-    .mutation(async ({ input }) => {
-      return { ok: true };
+      throw new Error("Not implemented in shared package");
     }),
 
   planReady: t.procedure
-    .input(PlanReadySchema)
+    .input(PlanReadyInput)
+    .output(StatusResult)
     .mutation(async ({ input }) => {
-      return { ok: true };
+      throw new Error("Not implemented in shared package");
     }),
 
-  approvePlan: t.procedure
-    .input(ApprovalSchema)
+  postStatus: t.procedure
+    .input(PostStatusInput)
+    .output(StatusResult)
     .mutation(async ({ input }) => {
-      return { ok: true };
+      throw new Error("Not implemented in shared package");
     }),
 
-  suggestChange: t.procedure
-    .input(SuggestionSchema)
+  approveJob: t.procedure
+    .input(ApproveJobInput)
+    .output(StatusResult)
     .mutation(async ({ input }) => {
-      return { ok: true };
+      throw new Error("Not implemented in shared package");
+    }),
+
+  cancelJob: t.procedure
+    .input(CancelJobInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  suggestChanges: t.procedure
+    .input(SuggestChangesInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      throw new Error("Not implemented in shared package");
     }),
 });
 
-export type TrpcRouter = typeof trpcRouter;
+export type AppRouter = typeof appRouter;

@@ -1,11 +1,20 @@
 {
-  "name": "@discord-agent/worker",
-  "version": "0.0.1",
+  "name": "@opencode-discord/worker",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun run tsc"
+  },
   "dependencies": {
-    "@discord-agent/shared": "workspace:*"
+    "@opencode-discord/shared": "workspace:*",
+    "@trpc/client": "^11.0.0",
+    "@types/bun": "^1.3.14",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
   }
 }
