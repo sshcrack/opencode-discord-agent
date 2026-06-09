@@ -1,13 +1,12 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaLibSQL } from "@prisma/adapter-libsql";
-import { createClient } from "@libsql/client";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
 const dbUrl = process.env.DATABASE_URL!;
-const isRemote = dbUrl.startsWith("http") || dbUrl.startsWith("libsql:");
+if (!dbUrl.startsWith("file:")) {
+  throw new Error("Only file-based SQLite URLs are supported (must start with 'file:').");
+}
 
-const libsql = createClient({
-  url: isRemote ? dbUrl : `file:${dbUrl.replace("file:", "")}`,
-});
+const adapter = new PrismaBetterSqlite3({ url: dbUrl });
+const prisma = new PrismaClient({ adapter });
 
-const adapter = new PrismaLibSQL(libsql as any);
-export const prisma = new PrismaClient({ adapter });
+export { prisma }

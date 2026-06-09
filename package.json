@@ -11,7 +11,18 @@
     "dev:bot": "bun run --cwd packages/bot src/index.ts",
     "dev:worker": "bun run --cwd packages/worker src/index.ts"
   },
+  "dependencies": {
+    "@trpc/server": "^11.17.0",
+    "@trpc/client": "^11.17.0",
+    "@prisma/client": "^7.8.0",
+    "@prisma/adapter-libsql": "^7.8.0",
+    "@libsql/client": "^0.17.3",
+    "discord.js": "^14.26.4",
+    "zod": "^4.4.3",
+    "dotenv": "^17.4.2"
+  },
   "devDependencies": {
-    "@types/bun": "^1.3.14"
+    "@types/bun": "^1.3.14",
+    "prisma": "^7.8.0"
   }
 }

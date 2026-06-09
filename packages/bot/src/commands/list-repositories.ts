@@ -19,7 +19,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     return;
   }
 
-  const lines = repos.map((r) => `• **${r.name}** — \`${r.path}\``);
+  const lines = repos.map(
+    (r: { name: string; path: string }) => `• **${r.name}** — \`${r.path}\``,
+  );
   await interaction.reply({
     content: `**Registered repositories:**\n${lines.join("\n")}`,
   });
