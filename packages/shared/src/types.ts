@@ -1,42 +1,26 @@
 import { z } from "zod";
+import {
+  ThreadStatus as PrismaThreadStatus,
+  JobStatus as PrismaJobStatus,
+  JobKind as PrismaJobKind,
+} from "@prisma/client";
 
-export const ThreadStatus = {
-  COLLECTING: "COLLECTING",
-  SUBMITTED: "SUBMITTED",
-  PLANNING: "PLANNING",
-  AWAITING_APPROVAL: "AWAITING_APPROVAL",
-  BUILDING: "BUILDING",
-  DONE: "DONE",
-  CANCELLED: "CANCELLED",
-  FAILED: "FAILED",
-} as const;
-
+// Re-export Prisma enums as the canonical source of truth
+export const ThreadStatus = PrismaThreadStatus;
 export type ThreadStatus = (typeof ThreadStatus)[keyof typeof ThreadStatus];
 
-export const JobStatus = {
-  PENDING: "PENDING",
-  CLAIMED: "CLAIMED",
-  PLANNING: "PLANNING",
-  AWAITING_APPROVAL: "AWAITING_APPROVAL",
-  BUILDING: "BUILDING",
-  DONE: "DONE",
-  CANCELLED: "CANCELLED",
-  FAILED: "FAILED",
-} as const;
-
+export const JobStatus = PrismaJobStatus;
 export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
 
-export const JobKind = {
-  BUG: "BUG",
-  FEATURE: "FEATURE",
-  OTHER: "OTHER",
-} as const;
-
+export const JobKind = PrismaJobKind;
 export type JobKind = (typeof JobKind)[keyof typeof JobKind];
+
+const values = <T extends Record<string, string>>(obj: T) =>
+  Object.values(obj) as [T[keyof T], ...T[keyof T][]];
 
 export const JobPayloadSchema = z.object({
   repo: z.string(),
-  kind: z.enum(["BUG", "FEATURE", "OTHER"]),
+  kind: z.enum(values(PrismaJobKind)),
   context: z.string(),
   fileUrls: z.array(z.string()).default([]),
   autoMode: z.boolean().default(false),

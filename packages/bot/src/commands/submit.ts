@@ -81,7 +81,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
   const payload: JobPayload = {
     repo: thread.repo,
-    kind: thread.kind as JobPayload["kind"],
+    kind: thread.kind,
     context,
     fileUrls,
     autoMode,

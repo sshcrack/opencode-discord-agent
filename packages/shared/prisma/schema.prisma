@@ -7,35 +7,68 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum JobKind {
+  BUG
+  FEATURE
+  OTHER
+}
+
+enum ThreadStatus {
+  COLLECTING
+  SUBMITTED
+  PLANNING
+  AWAITING_APPROVAL
+  BUILDING
+  DONE
+  CANCELLED
+  FAILED
+}
+
+enum JobStatus {
+  PENDING
+  CLAIMED
+  PLANNING
+  AWAITING_APPROVAL
+  BUILDING
+  DONE
+  CANCELLED
+  FAILED
+}
+
+enum WorkerStatus {
+  ONLINE
+  OFFLINE
+}
+
 model Thread {
-  id        String   @id
+  id        String       @id
   repo      String
-  kind      String   // BUG | FEATURE | OTHER
+  kind      JobKind
   autoMode  Boolean?
-  status    String   // ThreadStatus
-  createdAt DateTime @default(now())
+  status    ThreadStatus
+  createdAt DateTime     @default(now())
 
   job Job?
 }
 
 model Job {
-  id             String   @id @default(cuid())
-  threadId       String   @unique
-  payload        String   // JSON: JobPayload
+  id             String     @id @default(cuid())
+  threadId       String     @unique
+  payload        String     // JSON: JobPayload
   claimedBy      String?
   planSessionId  String?
   worktreeBranch String?
-  status         String   // JobStatus
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status         JobStatus
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   thread Thread @relation(fields: [threadId], references: [id])
 }
 
 model Worker {
-  id        String   @id
-  lastSeen  DateTime
-  status    String   // ONLINE | OFFLINE
+  id       String       @id
+  lastSeen DateTime
+  status   WorkerStatus
 }
 
 model Setting {

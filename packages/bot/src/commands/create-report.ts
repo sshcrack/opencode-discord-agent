@@ -3,7 +3,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { prisma } from "../db";
-import { ThreadStatus } from "@discord-agent/shared";
+import { ThreadStatus, type JobKind } from "@discord-agent/shared";
 
 export const data = new SlashCommandBuilder()
   .setName("create-report")
@@ -85,7 +85,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     data: {
       id: thread.id,
       repo,
-      kind,
+      kind: kind as JobKind,
       status: ThreadStatus.COLLECTING,
     },
   });
