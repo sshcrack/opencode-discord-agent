@@ -10,12 +10,6 @@ import {
 import { prisma } from "../db";
 import { getClient } from './helpers';
 
-type TextishChannel = TextChannel | ThreadChannel;
-
-function asTextish(c: any): TextishChannel | null {
-  return c?.isTextBased?.() ? (c as TextishChannel) : null;
-}
-
 export async function postPlan(
   job: { id: number; threadId: string; autoMode: boolean },
   planMd: string,
@@ -29,7 +23,11 @@ export async function postPlan(
     .setDescription(`\`\`\`markdown\n${planPreview}${truncated}\n\`\`\``)
     .setColor(0x5865f2);
 
-  const ch = asTextish(await getClient().channels.fetch(job.threadId));
+  const ch = await getClient().channels.fetch(job.threadId);
+  if (ch && !ch.isThread()) {
+    console.warn(`Channel ${job.threadId} is not a thread`);
+    return { success: false, error: "Channel is not a thread" };
+  }
 
   if (job.autoMode) {
     const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -50,13 +48,13 @@ export async function postPlan(
       const currentJob = await prisma.job.findUnique({ where: { id: job.id } });
       if (!currentJob || currentJob.status !== "plan_ready") {
         // Cancelled during countdown
-        if (countdownMsg) await countdownMsg.edit("❌ Auto-approval cancelled.").catch(() => {});
+        if (countdownMsg) await countdownMsg.edit("❌ Auto-approval cancelled.").catch(() => { });
         return { success: true };
       }
       if (countdownMsg) {
         await countdownMsg
           .edit(`⏳ Auto-approving in **${i}** seconds... (click Cancel to abort)`)
-          .catch(() => {});
+          .catch(() => { });
       }
     }
 
@@ -66,7 +64,7 @@ export async function postPlan(
         where: { id: job.id },
         data: { status: "approved" },
       });
-      if (countdownMsg) await countdownMsg.edit("✅ Auto-approved, proceeding to build...").catch(() => {});
+      if (countdownMsg) await countdownMsg.edit("✅ Auto-approved, proceeding to build...").catch(() => { });
       return { success: true, autoApproved: true };
     }
 

@@ -17,6 +17,10 @@ export async function handleAutocomplete(interaction: AutocompleteInteraction) {
 }
 
 export async function handleButton(interaction: ButtonInteraction) {
+  if (!interaction.channel || !interaction.channel.isThread()) {
+    return;
+  }
+
   console.log("[handleButton] customId:", interaction.customId, "user:", interaction.user.tag);
   const parts = interaction.customId.split(":");
   const action = parts[0];
@@ -57,14 +61,14 @@ export async function handleButton(interaction: ButtonInteraction) {
       embeds: [],
     });
 
-    const filter = (m: any) => !m.author.bot && m.author.id === interaction.user.id;
-    const collector = (interaction.channel as any).createMessageCollector({
+    const filter = (m: Message) => !m.author.bot && m.author.id === interaction.user.id;
+    const collector = interaction.channel.createMessageCollector({
       filter,
       time: 300_000,
       max: 1,
     });
 
-    collector.on("collect", async (msg: any) => {
+    collector.on("collect", async (msg) => {
       const suggestion = msg.content.trim();
 
       await prisma.job.update({
@@ -77,11 +81,11 @@ export async function handleButton(interaction: ButtonInteraction) {
       );
     });
 
-    collector.on("end", (collected: any) => {
+    collector.on("end", collected => {
       if (collected.size === 0) {
         interaction
           .followUp({ content: "⏰ No suggestion received within 5 minutes.", ephemeral: true })
-          .catch(() => {});
+          .catch(() => { });
       }
     });
   }

@@ -47,8 +47,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     isCommand: interaction.isCommand(),
     isAutocomplete: interaction.isAutocomplete(),
     isButton: interaction.isButton(),
-    commandName: interaction.isCommand() ? (interaction as any).commandName : undefined,
-    customId: interaction.isButton() ? (interaction as any).customId : undefined,
+    commandName: interaction.isCommand() ? interaction.commandName : undefined,
+    customId: interaction.isButton() ? interaction.customId : undefined,
   });
 
   try {
@@ -61,13 +61,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isCommand()) {
-      console.log("[Command] Handling", (interaction as any).commandName, "options:", JSON.stringify((interaction as any).options.data));
+      console.log("[Command] Name:", interaction.commandName);
       await handleCommand(interaction);
     } else if (interaction.isAutocomplete()) {
-      console.log("[Autocomplete] Focused option:", (interaction as any).options.getFocused());
+      console.log("[Autocomplete] Focused option:", interaction.options.getFocused());
       await handleAutocomplete(interaction);
     } else if (interaction.isButton()) {
-      console.log("[Button] Custom ID:", (interaction as any).customId);
+      console.log("[Button] Custom ID:", interaction.customId);
       await handleButton(interaction);
     }
   } catch (err) {

@@ -14,7 +14,8 @@
     "db:seed": "bunx --bun prisma db seed --cwd packages/bot",
     "db:pull": "bunx --bun prisma db pull --cwd packages/bot",
     "db:validate": "bunx --bun prisma validate --cwd packages/bot",
-    "db:format": "bunx --bun prisma format --cwd packages/bot"
+    "db:format": "bunx --bun prisma format --cwd packages/bot",
+    "typecheck": "bunx tsc --noEmit -p packages/bot && bunx tsc --noEmit -p packages/worker && bunx tsc --noEmit -p packages/shared"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

@@ -79,6 +79,13 @@ export const appRouter = t.router({
     .query(async () => {
       throw new Error("Not implemented in shared package");
     }),
+
+  renameThread: t.procedure
+    .input(RenameThreadInput)
+    .output(StatusResult)
+    .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
 });
 
 export type AppRouter = typeof appRouter;

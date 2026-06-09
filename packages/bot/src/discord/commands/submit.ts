@@ -15,8 +15,6 @@ export class SubmitCommand extends Command {
   async execute(interaction: CommandInteraction) {
     if (!interaction.isChatInputCommand()) return;
 
-    console.log("[SubmitCommand] Channel type:", interaction.channel?.type, "isThread:", !!(interaction.channel as any)?.isThread?.());
-
     const thread = interaction.channel;
     if (!thread?.isThread()) {
       await interaction.reply({

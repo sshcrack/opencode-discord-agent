@@ -17,7 +17,7 @@ async function main() {
   // Delete all guild commands before switching to global-only
   if (ALLOWED_GUILD_ID) {
     const guildRoute = Routes.applicationGuildCommands(CLIENT_ID, ALLOWED_GUILD_ID);
-    const guildCommands: any[] = (await rest.get(guildRoute)) as any[];
+    const guildCommands = (await rest.get(guildRoute)) as any[];
     if (guildCommands.length > 0) {
       console.log(
         `Deleting ${guildCommands.length} guild command(s):`,
@@ -29,7 +29,7 @@ async function main() {
 
   const route = Routes.applicationCommands(CLIENT_ID);
 
-  const existing: any[] = (await rest.get(route)) as any[];
+  const existing = (await rest.get(route)) as any[];
 
   const localNames = new Set(commandData.map((cmd) => cmd.name));
   const stale = existing.filter((cmd) => !localNames.has(cmd.name));

@@ -1,6 +1,6 @@
 import { Message } from "discord.js";
 
-const MAX_ATTACHMENT_SIZE = 100_000;
+const MAX_ATTACHMENT_SIZE = 10_000;
 
 async function downloadAttachmentContent(
   url: string,
@@ -26,7 +26,7 @@ async function downloadAttachmentContent(
 
     const text = await response.text();
     if (text.length > MAX_ATTACHMENT_SIZE) {
-      return text.slice(0, MAX_ATTACHMENT_SIZE) + "\n\n[truncated...]";
+      return null;
     }
 
     return text;
@@ -43,7 +43,7 @@ export async function buildContext(messages: Message[]): Promise<string> {
   const parts: string[] = [];
 
   for (const message of sorted) {
-    let entry = `${message.author.tag}: ${message.content}`;
+    let entry = message.content;
 
     if (message.attachments.size > 0) {
       for (const [, attachment] of message.attachments) {
