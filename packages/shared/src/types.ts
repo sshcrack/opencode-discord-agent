@@ -91,6 +91,7 @@ export const ClaimResponseSchema = z.object({
       payload: JobPayloadSchema,
       worktreeBranch: z.string().nullable(),
       status: z.string(),
+      repoPath: z.string(),
     })
     .nullable(),
 });

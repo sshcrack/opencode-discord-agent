@@ -7,7 +7,7 @@ export async function run(
   worktreeDir: string,
 ): Promise<{ sessionId: string; planMarkdown: string }> {
   const prompt = [
-    `You are working on the repository ${job.payload.repo}.`,
+    `You are working on the project ${job.payload.repo}.`,
     `Kind: ${job.payload.kind}.`,
     `User context:`,
     job.payload.context,

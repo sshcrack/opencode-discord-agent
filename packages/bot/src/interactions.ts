@@ -3,17 +3,12 @@ import {
   type Message,
   Events,
   Client,
-  ChannelType,
 } from "discord.js";
 import { prisma } from "./db";
 import { ThreadStatus, JobStatus } from "@discord-agent/shared";
+import { approvalMap } from "./router";
 
-export const approvalMap = new Map<
-  string,
-  { approved: boolean; cancelled: boolean; suggestion?: { text: string; sessionId: string } }
->()
-
-const awaitingSuggestion = new Map<string, { userId: string; timeout: ReturnType<typeof setTimeout> }>()
+const awaitingSuggestion = new Map<string, { userId: string; timeout: ReturnType<typeof setTimeout> }>();
 
 export function setupInteractions(client: Client) {
   client.on(Events.InteractionCreate, async (interaction: Interaction) => {
@@ -59,7 +54,7 @@ export function setupInteractions(client: Client) {
       },
     });
 
-    await message.react("✏️");
+    await message.react("\u270f\ufe0f");
   });
 }
 
@@ -82,7 +77,7 @@ async function handleApprove(
   approvalMap.set(jobId, { approved: true, cancelled: false });
 
   await interaction.update({
-    content: "✅ Approved — building…",
+    content: "\u2705 Approved — building\u2026",
     components: [],
   });
 }
@@ -104,7 +99,7 @@ async function handleSuggest(
   });
 
   await interaction.update({
-    content: "✏️ Send your suggested changes as a reply in this thread.",
+    content: "\u270f\ufe0f Send your suggested changes as a reply in this thread.",
     components: [],
   });
 }
@@ -128,7 +123,7 @@ async function handleCancel(
   approvalMap.set(jobId, { approved: false, cancelled: true });
 
   await interaction.update({
-    content: "❌ Cancelled.",
+    content: "\u274c Cancelled.",
     components: [],
   });
 }

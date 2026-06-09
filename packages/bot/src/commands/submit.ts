@@ -32,6 +32,15 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     return;
   }
 
+  const repo = await prisma.repository.findUnique({ where: { name: thread.repo } });
+  if (!repo) {
+    await interaction.reply({
+      content: `Repository **${thread.repo}** is no longer registered. Admin must run \`/add-repository\` first.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
   await interaction.deferReply();
 
   if (!interaction.channel?.isThread()) {

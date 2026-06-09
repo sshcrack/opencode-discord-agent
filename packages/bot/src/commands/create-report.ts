@@ -1,7 +1,6 @@
 import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
-  ChannelType,
 } from "discord.js";
 import { prisma } from "../db";
 import { ThreadStatus } from "@discord-agent/shared";
@@ -23,16 +22,34 @@ export const data = new SlashCommandBuilder()
   .addStringOption((opt) =>
     opt
       .setName("repo")
-      .setDescription("GitHub repo slug (default: DEFAULT_REPO)")
+      .setDescription("Registered repository name (default: first registered)")
       .setRequired(false),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const kind = interaction.options.getString("kind", true);
-  const repo =
-    interaction.options.getString("repo") ||
-    process.env.DEFAULT_REPO ||
-    "sshcrack/talking-colonists";
+  let repo = interaction.options.getString("repo");
+
+  if (!repo) {
+    const first = await prisma.repository.findFirst({ orderBy: { name: "asc" } });
+    if (!first) {
+      await interaction.reply({
+        content: "No repositories registered. Admin must run `/add-repository` first.",
+        ephemeral: true,
+      });
+      return;
+    }
+    repo = first.name;
+  } else {
+    const exists = await prisma.repository.findUnique({ where: { name: repo } });
+    if (!exists) {
+      await interaction.reply({
+        content: `Repository **${repo}** not found. Use \`/list-repositories\` to see available ones.`,
+        ephemeral: true,
+      });
+      return;
+    }
+  }
 
   if (!interaction.channel || !interaction.channel.isTextBased()) {
     await interaction.reply({
@@ -52,7 +69,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
   const thread = await (interaction.channel as any).threads.create({
     name: `[${kind.toLowerCase()}] ${Date.now()}`,
-    type: ChannelType.PrivateThread,
+    type: 12,
     reason: `New ${kind} report`,
   });
 
@@ -74,6 +91,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
   });
 
   await interaction.reply({
-    content: `Thread ready — add context, upload files, then run \`/submit\`.`,
+    content: `Thread ready for **${repo}** — add context, upload files, then run \`/submit\`.`,
   });
 }

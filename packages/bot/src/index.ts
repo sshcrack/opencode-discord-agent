@@ -1,15 +1,6 @@
 import { Client, GatewayIntentBits, REST, Routes } from "discord.js";
-import { trpcRouter } from "@discord-agent/shared";
-import { prisma } from "./db";
-import {
-  handleHeartbeat,
-  handlePollNextJob,
-  handlePostStatus,
-  handlePlanReady,
-  handleApprovePlan,
-  handleSuggestChange,
-  setQueueClient,
-} from "./queue";
+import { createHTTPServer } from "@trpc/server/adapters/standalone";
+import { appRouter, createContext, setDiscordClient } from "./router";
 import { setupInteractions } from "./interactions";
 import { setFallbackClient } from "./fallback";
 
@@ -18,7 +9,6 @@ async function main() {
   const clientId = process.env.DISCORD_CLIENT_ID;
   const guildId = process.env.DISCORD_GUILD_ID;
   const port = parseInt(process.env.BOT_PORT || "3451", 10);
-  const secret = process.env.WORKER_SECRET;
 
   if (!token || !clientId) {
     console.error("Missing DISCORD_TOKEN or DISCORD_CLIENT_ID");
@@ -33,7 +23,7 @@ async function main() {
     ],
   });
 
-  setQueueClient(client);
+  setDiscordClient(client);
   setFallbackClient(client);
   setupInteractions(client);
 
@@ -45,6 +35,9 @@ async function main() {
       import("./commands/create-report"),
       import("./commands/submit"),
       import("./commands/set-auto"),
+      import("./commands/add-repository"),
+      import("./commands/list-repositories"),
+      import("./commands/remove-repository"),
     ])
   ).map((mod) => mod.data.toJSON());
 
@@ -55,62 +48,14 @@ async function main() {
   await rest.put(route, { body: commands });
   console.log(`Registered ${commands.length} slash commands`);
 
-  // tRPC HTTP server via Bun.serve
-  Bun.serve({
-    port,
-    async fetch(req: Request) {
-      const auth = req.headers.get("authorization");
-      const bearer = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-      if (secret && bearer !== secret) {
-        return new Response("Unauthorized", { status: 401 });
-      }
+  // tRPC standalone HTTP server
+  createHTTPServer({
+    router: appRouter,
+    createContext,
+    basePath: "/trpc",
+  }).listen(port);
 
-      const url = new URL(req.url);
-      const path = url.pathname.replace("/trpc/", "");
-
-      if (req.method === "POST" && path === "heartbeat") {
-        const body = await req.json() as any;
-        await handleHeartbeat(body.workerId ?? body[0]?.workerId);
-        return Response.json([{ result: { data: { ok: true } } }]);
-      }
-
-      if (req.method === "GET" && path === "pollNextJob") {
-        const raw = url.searchParams.get("input");
-        if (!raw) return Response.json([{ result: { data: { job: null } } }]);
-        const parsed = JSON.parse(raw);
-        const result = await handlePollNextJob(parsed.workerId);
-        return Response.json([{ result: { data: result } }]);
-      }
-
-      if (req.method === "POST" && path === "postStatus") {
-        const body = await req.json() as any;
-        await handlePostStatus(body);
-        return Response.json([{ result: { data: { ok: true } } }]);
-      }
-
-      if (req.method === "POST" && path === "planReady") {
-        const body = await req.json() as any;
-        await handlePlanReady(body);
-        return Response.json([{ result: { data: { ok: true } } }]);
-      }
-
-      if (req.method === "POST" && path === "approvePlan") {
-        const body = await req.json() as any;
-        await handleApprovePlan(body);
-        return Response.json([{ result: { data: { ok: true } } }]);
-      }
-
-      if (req.method === "POST" && path === "suggestChange") {
-        const body = await req.json() as any;
-        await handleSuggestChange(body);
-        return Response.json([{ result: { data: { ok: true } } }]);
-      }
-
-      return new Response("Not found", { status: 404 });
-    },
-  });
-
-  console.log(`tRPC server listening on :${port}`);
+  console.log(`tRPC server listening on :${port}/trpc`);
 
   await client.login(token);
   console.log(`Logged in as ${client.user?.tag}`);
