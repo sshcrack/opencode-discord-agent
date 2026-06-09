@@ -123,6 +123,11 @@ export const GetSettingInput = z.object({
   key: z.string(),
 });
 
+export const SetIssueNumberInput = z.object({
+  jobId: z.number(),
+  issueNumber: z.number(),
+});
+
 export const GetSettingOutput = z.object({
   value: z.string().nullable(),
 });

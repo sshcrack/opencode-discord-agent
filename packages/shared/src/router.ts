@@ -12,6 +12,7 @@ import {
   StatusResult,
   GetSettingInput,
   GetSettingOutput,
+  SetIssueNumberInput,
 } from "./schemas";
 
 const t = initTRPC.create();
@@ -77,6 +78,13 @@ export const appRouter = t.router({
     .input(GetSettingInput)
     .output(GetSettingOutput)
     .query(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  setIssueNumber: t.procedure
+    .input(SetIssueNumberInput)
+    .output(StatusResult)
+    .mutation(async () => {
       throw new Error("Not implemented in shared package");
     }),
 });

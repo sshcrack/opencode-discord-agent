@@ -8,6 +8,7 @@ import {
   CancelJobInput,
   SuggestChangesInput,
   AckSuggestionInput,
+  SetIssueNumberInput,
   JobSchema,
   StatusResult,
   GetSettingInput,
@@ -196,6 +197,17 @@ export const appRouter = t.router({
     .query(async ({ input }) => {
       const setting = await prisma.setting.findUnique({ where: { key: input.key } });
       return { value: setting?.value ?? null };
+    }),
+
+  setIssueNumber: t.procedure
+    .input(SetIssueNumberInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      await prisma.job.update({
+        where: { id: input.jobId },
+        data: { issueNumber: input.issueNumber },
+      });
+      return { success: true };
     }),
 });
 

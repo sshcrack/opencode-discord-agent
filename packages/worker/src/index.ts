@@ -105,6 +105,7 @@ async function handleJob(job: Job) {
       issueNumber = await generateIssue(job, repoPath);
 
       if (issueNumber !== null) {
+        await client.setIssueNumber.mutate({ jobId: job.id, issueNumber }).catch(() => {});
         const repoNameWithOwner = dryRun ? "" : await getRepoNameWithOwner(repoPath);
         const issueUrl = repoNameWithOwner
           ? `https://github.com/${repoNameWithOwner}/issues/${issueNumber}`
@@ -250,7 +251,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
     }
 
     const proc = Bun.spawn(
-      ["opencode", "run", "--model", issueModel, "--print", prompt],
+      ["opencode", "run", "--model", issueModel, prompt],
       { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
     );
 
@@ -334,7 +335,7 @@ async function runPlanAgent(
     return { planMd: "# DRY RUN — plan generation skipped", sessionId: `dry-run-${job.id}` };
   }
 
-  return runOpencodeStreaming(job.id, worktreePath, ["opencode", "run", "--agent", "plan", "--print", prompt]);
+  return runOpencodeStreaming(job.id, worktreePath, ["opencode", "run", "--agent", "plan", prompt]);
 }
 
 async function runOpencodeStreaming(
@@ -461,7 +462,7 @@ async function waitForApproval(
           "--agent", "plan",
           "--session", currentSession,
           "--continue",
-          "--print", suggestion,
+          suggestion,
         ],
       );
 
@@ -520,7 +521,7 @@ async function runBuildAgent(
   }
 
   await runOpencodeStreaming(jobId, worktreePath, [
-    "opencode", "run", "--agent", "build", "--print", prompt,
+    "opencode", "run", "--agent", "build", prompt,
   ]);
 
   // Create the PR via gh CLI
