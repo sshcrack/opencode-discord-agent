@@ -128,6 +128,7 @@ async function recordAnswer(jobId: number, answer: string) {
       where: { id: jobId },
       data: {
         pendingQuestionIndex: questions.length,
+        pendingAnswers: JSON.stringify(pendingAnswers),
         statusMessageId: null,
       },
     });
