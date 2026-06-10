@@ -36,6 +36,13 @@ export class UpdateCommand extends Command {
       ? ""
       : `\n❌ Migration failed: ${migrate.stderr.toString().slice(0, 500)}`;
 
+    if (migrateOk) {
+      const generate = Bun.spawnSync(["bunx", "--bun", "prisma", "generate"], { cwd: botDir });
+      if (generate.exitCode !== 0) {
+        console.error(`prisma generate failed: ${generate.stderr.toString().slice(0, 500)}`);
+      }
+    }
+
     // Save the channel so the bot can post "Done." after restart
     await prisma.setting.upsert({
       where: { key: "last_update_channel_id" },
