@@ -53,6 +53,9 @@ export const JobSchema = z.object({
   autoMode: z.boolean(),
   pendingSuggestion: z.string().nullable(),
   planEditToken: z.string().nullish(),
+  pendingQuestions: z.string().nullable(),
+  pendingQuestionIndex: z.number().nullable(),
+  pendingAnswers: z.string().nullable(),
 });
 
 export const PollNextJobInput = z.object({
@@ -148,4 +151,29 @@ export const RenameThreadInput = z.object({
 export const MarkCompleteInput = z.object({
   jobId: z.number(),
   prUrl: z.string(),
+});
+
+const QuestionSchema = z.object({
+  q: z.string(),
+  options: z.array(z.string()).min(1),
+  recommended: z.number().int().min(0),
+});
+export type Question = z.infer<typeof QuestionSchema>;
+
+export const AskQuestionInput = z.object({
+  jobId: z.number(),
+  questions: z.array(QuestionSchema),
+});
+
+export const PollAnswerInput = z.object({
+  jobId: z.number(),
+});
+
+export const GetBotHeadOutput = z.object({
+  sha: z.string(),
+});
+
+export const PollAnswerOutput = z.object({
+  answered: z.boolean(),
+  formatted: z.string().nullable(),
 });

@@ -61,9 +61,12 @@ model Job {
   issueNumber       Int?
   prUrl             String?
   autoMode          Boolean    @default(false)
-  pendingSuggestion String?
-  planEditToken     String?
-  statusMessageId   String?
+  pendingSuggestion    String?
+  planEditToken        String?
+  statusMessageId      String?
+  pendingQuestions     String?
+  pendingQuestionIndex Int?
+  pendingAnswers       String?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   thread            ReportThread @relation(fields: [threadId], references: [threadId])

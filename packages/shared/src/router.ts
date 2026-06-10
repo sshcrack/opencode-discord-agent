@@ -16,6 +16,10 @@ import {
   RenameThreadInput,
   TypingInput,
   MarkCompleteInput,
+  AskQuestionInput,
+  PollAnswerInput,
+  PollAnswerOutput,
+  GetBotHeadOutput,
 } from "./schemas";
 
 const t = initTRPC.create();
@@ -109,6 +113,26 @@ export const appRouter = t.router({
     .input(MarkCompleteInput)
     .output(StatusResult)
     .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  askQuestion: t.procedure
+    .input(AskQuestionInput)
+    .output(StatusResult)
+    .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  pollAnswer: t.procedure
+    .input(PollAnswerInput)
+    .output(PollAnswerOutput)
+    .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  getBotHead: t.procedure
+    .output(GetBotHeadOutput)
+    .query(async () => {
       throw new Error("Not implemented in shared package");
     }),
 });

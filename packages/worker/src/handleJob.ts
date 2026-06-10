@@ -77,7 +77,47 @@ async function handleJob(job: Job) {
       '  printf "%s" "$s"',
       '}',
       '',
-      'if [ "$1" = "--rename" ]; then',
+    ];
+
+    // Ask command — only available when not in auto mode
+    if (!job.autoMode) {
+      helperLines.push(
+        'if [ "$1" = "ask" ]; then',
+        '  shift',
+        '  QUESTIONS_JSON="$*"',
+        `  echo "$QUESTIONS_JSON" > "/tmp/opencode-ask-${job.id}.json"`,
+        `  BODY='{"0":{"jobId":'"$JOB_ID"',"questions":'"$QUESTIONS_JSON"'}}'`,
+        '  curl -s -X POST "$BOT_URL/trpc/askQuestion" \\',
+        '    -H "Authorization: Bearer $TOKEN" \\',
+        '    -H "Content-Type: application/json" \\',
+        '    -d "$BODY" > /dev/null',
+        '  echo "[ Waiting for answers in Discord thread... ]" >&2',
+        '  while true; do',
+        '    sleep 3',
+        '    RESULT=$(curl -s -X POST "$BOT_URL/trpc/pollAnswer" \\',
+        '      -H "Authorization: Bearer $TOKEN" \\',
+        '      -H "Content-Type: application/json" \\',
+        `      -d '{"0":{"jobId":'"$JOB_ID"'}}')`,
+        '    ANSWER=$(echo "$RESULT" | bun -e "',
+        '      const r = JSON.parse(await Bun.stdin.text());',
+        '      const d = r?.result?.data;',
+        `      if (d?.answered && d?.formatted) console.log(d.formatted);`,
+        '    ")',
+        '    if [ -n "$ANSWER" ]; then',
+        '      echo "$ANSWER"',
+        '      break',
+        '    fi',
+        '  done',
+        `  rm -f "/tmp/opencode-ask-${job.id}.json"`,
+        'elif [ "$1" = "--rename" ]; then',
+      );
+    } else {
+      helperLines.push(
+        'if [ "$1" = "--rename" ]; then',
+      );
+    }
+
+    helperLines.push(
       '  shift',
       '  NAME="$*"',
       '  NAME_ESC=$(_json_esc "$NAME")',
@@ -93,7 +133,7 @@ async function handleJob(job: Job) {
       '    -H "Content-Type: application/json" \\',
       '    -d \'{"0":{"jobId":\'"$JOB_ID"\',"message":"\'"$MSG_ESC"\',"level":"\'"$LVL_ESC"\'"}}\' > /dev/null',
       'fi',
-    ];
+    );
     await Bun.write(helperPath, helperLines.join('\n'));
     Bun.spawnSync(["chmod", "700", helperPath]);
     jobLog(job.id, `Discord helper created at ${helperPath}`);
@@ -197,7 +237,7 @@ async function handleJob(job: Job) {
     await postInfo(job.id, "Starting build agent...");
 
     const buildStart = performance.now();
-    const prUrl = await runBuildAgent(job.id, worktreePath, issueNumber, branch, helperPath);
+    const prUrl = await runBuildAgent(job.id, worktreePath, issueNumber, branch, helperPath, job.autoMode);
     jobLog(job.id, `Build agent completed in ${(performance.now() - buildStart).toFixed(0)}ms`);
 
     if (prUrl) {

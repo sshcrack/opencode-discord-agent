@@ -16,10 +16,15 @@ import {
   GetSettingInput,
   GetSettingOutput,
   TypingInput,
+  AskQuestionInput,
+  PollAnswerInput,
+  PollAnswerOutput,
+  GetBotHeadOutput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
 import { postToThread, renameThread, getClient } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
+import { showNextQuestion, recordAnswer, formatQaBlock } from "../discord/questions";
 import type { Job } from "../db/generated/client";
 import { TextChannel, ThreadChannel } from "discord.js";
 
@@ -41,6 +46,9 @@ function toJobOutput(job: Job) {
     autoMode: job.autoMode,
     pendingSuggestion: job.pendingSuggestion,
     planEditToken: job.planEditToken ?? null,
+    pendingQuestions: job.pendingQuestions ?? null,
+    pendingQuestionIndex: job.pendingQuestionIndex ?? null,
+    pendingAnswers: job.pendingAnswers ?? null,
   };
 }
 
@@ -283,6 +291,61 @@ export const appRouter = t.router({
       await postToThread(job.threadId, `✅ Job complete! <@${job.reporterId}> your PR is ready!`);
 
       return { success: true };
+    }),
+
+  askQuestion: t.procedure
+    .input(AskQuestionInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const job = await prisma.job.findUnique({ where: { id: input.jobId } });
+      if (!job) return { success: false };
+
+      await prisma.job.update({
+        where: { id: input.jobId },
+        data: {
+          pendingQuestions: JSON.stringify(input.questions),
+          pendingQuestionIndex: 0,
+          pendingAnswers: "[]",
+        },
+      });
+
+      await showNextQuestion(job.threadId, job.id, input.questions, 0);
+
+      return { success: true };
+    }),
+
+  pollAnswer: t.procedure
+    .input(PollAnswerInput)
+    .output(PollAnswerOutput)
+    .mutation(async ({ input }) => {
+      const job = await prisma.job.findUnique({ where: { id: input.jobId } });
+      if (!job || !job.pendingQuestions) return { answered: false, formatted: null };
+
+      const questions = JSON.parse(job.pendingQuestions) as { q: string; options: string[]; recommended: number }[];
+      const pendingAnswers = job.pendingAnswers ? JSON.parse(job.pendingAnswers) as { q: string; a: string }[] : [];
+      const currentIdx = job.pendingQuestionIndex ?? 0;
+
+      if (currentIdx >= questions.length) {
+        const formatted = formatQaBlock(questions, pendingAnswers);
+        await prisma.job.update({
+          where: { id: input.jobId },
+          data: {
+            pendingQuestions: null,
+            pendingQuestionIndex: null,
+            pendingAnswers: null,
+          },
+        });
+        return { answered: true, formatted };
+      }
+
+      return { answered: false, formatted: null };
+    }),
+
+  getBotHead: t.procedure
+    .output(GetBotHeadOutput)
+    .query(async () => {
+      const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
+      return { sha: proc.stdout.toString().trim() || "unknown" };
     }),
 });
 

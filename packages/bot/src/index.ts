@@ -1,7 +1,8 @@
-import { Client, GatewayIntentBits, Events, TextChannel } from "discord.js";
+import { Client, GatewayIntentBits, Events, TextChannel, ThreadChannel } from "discord.js";
 import { prisma } from "./db";
 import { handleCommand } from "./discord/commands";
 import { handleAutocomplete, handleButton } from "./discord/interactions";
+import { recordAnswer, cancelQuestions } from "./discord/questions";
 import { createTRPCServer } from "./trpc/server";
 import { checkWorkerOnline } from "./discord/fallback";
 
@@ -101,6 +102,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleAutocomplete(interaction);
     } else if (interaction.isButton()) {
       console.log("[Button] Custom ID:", interaction.customId);
+      if (interaction.customId.startsWith("ask_ans:") || interaction.customId.startsWith("ask_cancel:")) {
+        const parts = interaction.customId.split(":");
+        const action = parts[0];
+        const jobId = parseInt(parts[1]!);
+        if (isNaN(jobId)) {
+          await interaction.reply({ content: ":x: Invalid job ID", ephemeral: true });
+          return;
+        }
+
+        if (action === "ask_cancel") {
+          await interaction.reply({ content: "❌ Cancelled question flow.", ephemeral: true });
+          await cancelQuestions(jobId);
+        } else {
+          const optionIdx = parseInt(parts[2]!);
+          const job = await prisma.job.findUnique({ where: { id: jobId } });
+          if (!job || !job.pendingQuestions) {
+            await interaction.reply({ content: ":x: No pending questions for this job.", ephemeral: true });
+            return;
+          }
+          const questions = JSON.parse(job.pendingQuestions) as { q: string; options: string[]; recommended: number }[];
+          const currentIdx = job.pendingQuestionIndex ?? 0;
+          const answer = questions[currentIdx]?.options[optionIdx] ?? "Unknown";
+          await interaction.reply({ content: `✅ Selected: ${answer}`, ephemeral: true });
+          await recordAnswer(jobId, answer);
+        }
+        return;
+      }
       await handleButton(interaction);
     }
   } catch (err) {
@@ -109,6 +137,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ content: ":x: An error occurred", ephemeral: true }).catch(() => {});
     }
   }
+});
+
+// Handle free-form answers to pending questions
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot) return;
+  if (!message.channel.isThread()) return;
+
+  try {
+    const job = await prisma.job.findFirst({
+      where: {
+        threadId: message.channelId,
+        pendingQuestions: { not: null },
+      },
+    });
+    if (!job) return;
+
+    const questions = JSON.parse(job.pendingQuestions!) as { q: string; options: string[]; recommended: number }[];
+    const currentIdx = job.pendingQuestionIndex ?? 0;
+    if (currentIdx >= questions.length) return;
+
+    await recordAnswer(job.id, message.content);
+  } catch { /* ignore */ }
 });
 
 client.login(DISCORD_TOKEN);

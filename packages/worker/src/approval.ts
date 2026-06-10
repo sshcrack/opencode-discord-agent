@@ -90,7 +90,20 @@ async function waitForApproval(
           `The plan should cover: files to change, approach, and any risk areas.`,
           `Write the plan to \`$HOME/.local/share/opencode/plans/\` (create the directory if it doesn't exist). After saving, report the exact path by writing a single line at the end of your response in this exact format: PLAN_PATH:/path/to/your/plan.md`,
           current.context ? `\n\nDiscord report context:\n${current.context}` : "",
-          `\n\nYou can post messages to the Discord thread by running \`${helperPath} info "your message"\`. You can also rename the thread with \`${helperPath} --rename "new name"\`.`,
+          `\n\nYou can post messages to the Discord thread and rename it by running:
+  \`${helperPath} info "message"\` — info
+  \`${helperPath} success "message"\` — success
+  \`${helperPath} error "message"\` — error
+  \`${helperPath} --rename "new name"\` — rename thread`,
+          current.autoMode ? "" : `\n\nYou can ask questions and wait for answers using:
+  \`${helperPath} ask '...json...'\`
+
+  The \`ask\` command takes a JSON array argument. Each object has:
+    - "q" (required): the question text
+    - "options" (required): proposed answers the user can pick from
+    - "recommended" (required): index of the recommended option
+
+  Always provide options + a recommended answer. The script blocks until all questions are answered.`,
         ].filter(Boolean).join(" ");
         const result = await runOpencodeStreaming(
           jobId,

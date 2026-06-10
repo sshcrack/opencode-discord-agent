@@ -14,7 +14,35 @@ async function runPlanAgent(
   const contextBlock = job.context
     ? `\n\nThe following is the Discord report thread context with file attachments:\n${job.context}`
     : "";
-  const helperBlock = `\n\nYou can post messages to the Discord thread and interact with users by running \`${helperPath} info "your message"\`. You can also rename the thread with \`${helperPath} --rename "new name"\`. Use this to ask questions, confirm decisions, or get clarifications from the user.`;
+  const askBlock = job.autoMode ? "" : `\n\nYou can ask questions and wait for answers using:
+\`${helperPath} ask '...json...'\`
+
+The \`ask\` command takes a JSON array argument. Each object has:
+  - "q" (required): the question text
+  - "options" (required): proposed answers the user can pick from
+  - "recommended" (required): index of the recommended option
+
+Examples:
+  # One question:
+  ${helperPath} ask '[{"q":"What approach?","options":["Refactor","Rewrite"],"recommended":0}]'
+
+  # Multiple questions (answered one at a time in Discord):
+  ${helperPath} ask '[{"q":"Color?","options":["Red","Blue"],"recommended":0},{"q":"Size?","options":["S","M","L"],"recommended":1}]'
+
+The script blocks until all questions are answered. The output is:
+  Q: Color?
+  A: Red
+
+  Q: Size?
+  A: Large
+
+Always provide options + a recommended answer.`;
+
+  const helperBlock = `\n\nYou can post messages to the Discord thread and rename it by running:
+  \`${helperPath} info "message"\` — info level
+  \`${helperPath} success "message"\` — success message
+  \`${helperPath} error "message"\` — error message
+  \`${helperPath} --rename "new name"\` — rename thread` + askBlock;
   const prompt = [
     `You are a planning agent for a ${job.kind} task on repository ${job.repoSlug}.${issueRef}`,
     `Review the codebase and write a detailed implementation plan.`,
