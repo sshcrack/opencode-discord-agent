@@ -292,18 +292,58 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
     }
 
     const runStart = performance.now();
-    jobLog(job.id, `Spawning: opencode run --model ${issueModel} --dir ${repoPath} [${prompt.length} chars]`);
+    jobLog(job.id, `Spawning: opencode run --model ${issueModel} --dir ${repoPath} --format json [${prompt.length} chars]`);
+
     const proc = Bun.spawn(
-      ["opencode", "run", "--model", issueModel, "--dir", repoPath, prompt],
+      ["opencode", "run", "--model", issueModel, "--dir", repoPath, prompt, "--format", "json"],
       { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
     );
 
-    const [output, stderrContent] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
+    // Stream JSON events for live Discord updates
+    let issueText = "";
+    let eventCount = 0;
+    let buf = "";
+    const reader = proc.stdout.getReader();
+    const decoder = new TextDecoder();
+    const stderrPromise = new Response(proc.stderr).text();
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          eventCount++;
+          let event: any;
+          try {
+            event = JSON.parse(trimmed);
+          } catch {
+            continue;
+          }
+          // Handle events for live Discord updates
+          const result = handleJsonEvent(event, job.id, repoPath);
+          if (result) {
+            await client.postStatus
+              .mutate({ jobId: job.id, message: result.message, level: result.level, append: result.append })
+              .catch(() => {});
+          }
+          // Accumulate text for issue extraction
+          if (event.type === "text" && event.part?.text) {
+            issueText += event.part.text;
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
     const exitCode = await proc.exited;
-    jobLog(job.id, `opencode issue gen finished: exit ${exitCode}, output ${output.length} chars (${(performance.now() - runStart).toFixed(0)}ms)`);
+    const stderrContent = await stderrPromise;
+    jobLog(job.id, `opencode issue gen finished: exit ${exitCode}, ${eventCount} events, output ${issueText.length} chars (${(performance.now() - runStart).toFixed(0)}ms)`);
 
     if (exitCode !== 0) {
       jobLog(job.id, `Issue generation stderr: ${stderrContent.slice(0, 300)}`);
@@ -315,7 +355,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
       return null;
     }
 
-    const lines = output.trim().split("\n");
+    const lines = issueText.trim().split("\n");
     const title =
       lines[0]?.replace(/^#+\s*/, "").trim() || `[${job.repoSlug}] ${job.kind} report`;
     const body =
@@ -376,6 +416,7 @@ async function runPlanAgent(
   const prompt = [
     `You are a planning agent for a ${job.kind} task on repository ${job.repoSlug}.${issueRef}`,
     `Review the codebase and write a detailed implementation plan to PLAN.md at the root of this directory.`,
+    `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
     `The plan should cover: files to change, approach, and any risk areas.`,
     contextBlock,
   ].filter(Boolean).join(" ");
@@ -394,23 +435,142 @@ async function runPlanAgent(
   return runOpencodeStreaming(job.id, worktreePath, ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt]);
 }
 
+// ── opencode JSON event handlers ──────────────────────────────────────────────
+
+function shortPath(filePath: string, cwd?: string): string {
+  if (cwd && filePath.startsWith(cwd)) {
+    const rel = filePath.slice(cwd.length).replace(/^\//, "");
+    const parts = rel.split("/");
+    if (parts.length <= 3) return rel;
+    return "…/" + parts.slice(-2).join("/");
+  }
+  const parts = filePath.split("/");
+  if (parts.length <= 3) return filePath;
+  return "…/" + parts.slice(-2).join("/");
+}
+
+type EventResult = { level: "info" | "debug" | "success"; message: string; append: boolean } | null;
+
+function formatToolUse(part: any, cwd?: string): EventResult {
+  const tool = part.tool as string;
+  const state = part.state || {};
+  const input = state.input || {};
+
+  switch (tool) {
+    case "read": {
+      const path = input.filePath || "";
+      if (!path) return null;
+      const display = state.metadata?.display;
+      if (display?.type === "directory") {
+        return { message: `📂 \`${shortPath(path, cwd)}\``, level: "debug", append: true };
+      }
+      return { message: `📖 \`${shortPath(path, cwd)}\``, level: "debug", append: true };
+    }
+
+    case "write":
+    case "create": {
+      const path = input.filePath || input.path || "";
+      return { message: `✏️ Writing \`${shortPath(path, cwd)}\``, level: "info", append: true };
+    }
+
+    case "edit": {
+      const path = input.filePath || "";
+      const oldStr = (input.oldString || "").split("\n")[0]?.trim().slice(0, 60) || "";
+      const desc = oldStr ? ` — \`${oldStr}…\`` : "";
+      return { message: `✏️ Editing \`${shortPath(path, cwd)}\`${desc}`, level: "info", append: true };
+    }
+
+    case "delete": {
+      const path = input.filePath || "";
+      return { message: `🗑️ Deleting \`${shortPath(path, cwd)}\``, level: "info", append: true };
+    }
+
+    case "bash": {
+      const cmd = (input.command || "").trim();
+      if (!cmd) return null;
+      const display = cmd.length > 80 ? cmd.slice(0, 80) + "…" : cmd;
+      return { message: `💻 \`${display}\``, level: "info", append: true };
+    }
+
+    case "grep":
+    case "search": {
+      const pattern = input.pattern || input.query || "";
+      return { message: `🔍 \`${pattern}\``, level: "debug", append: true };
+    }
+
+    case "glob": {
+      const pattern = input.pattern || "";
+      return { message: `🔍 \`${pattern}\``, level: "debug", append: true };
+    }
+
+    default: {
+      const path = input.filePath || input.path || "";
+      const suffix = path ? ` \`${shortPath(path, cwd)}\`` : "";
+      return { message: `🛠️ ${tool}${suffix}`, level: "debug", append: true };
+    }
+  }
+}
+
+function handleJsonEvent(event: any, jobId: number, cwd: string): EventResult {
+  const type = event.type as string;
+  const part = event.part || {};
+
+  switch (type) {
+    case "step_start": {
+      return { message: "🤔 Analyzing codebase...", level: "info", append: false };
+    }
+
+    case "reasoning": {
+      const text = (part.text || "").trim();
+      if (!text) return null;
+      const truncated = text.length > 300 ? text.slice(0, 300) + "…" : text;
+      return { message: `💭 ${truncated}`, level: "debug", append: true };
+    }
+
+    case "tool_use": {
+      if (part.type === "tool") return formatToolUse(part, cwd);
+      return null;
+    }
+
+    case "text": {
+      if (part.type !== "text") return null;
+      const text = (part.text || "").trim();
+      if (!text) return null;
+      const truncated = text.length > 500 ? text.slice(0, 500) + "…" : text;
+      return { message: truncated, level: "info", append: true };
+    }
+
+    case "step_finish": {
+      if (part.reason === "stop") {
+        return { message: "✅ Task complete", level: "success", append: false };
+      }
+      return null;
+    }
+
+    default:
+      return null;
+  }
+}
+
 async function runOpencodeStreaming(
   jobId: number,
   cwd: string,
   argv: string[],
   extraArgs: string[] = [],
 ): Promise<{ planMd: string; sessionId: string }> {
-  jobLog(jobId, `Spawning: ${argv.join(" ")} ${extraArgs.join(" ")}`);
+  const fullArgs = [...argv, "--format", "json", ...extraArgs];
+  jobLog(jobId, `Spawning: ${fullArgs.join(" ")}`);
 
-  const proc = Bun.spawn([...argv, ...extraArgs], {
+  const proc = Bun.spawn(fullArgs, {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
   });
 
   let sessionId = "";
-  let fullOutput = "";
+  const textParts: string[] = [];
   let lineCount = 0;
+  let buffer = "";
 
   const reader = proc.stdout.getReader();
   const decoder = new TextDecoder();
@@ -424,30 +584,38 @@ async function runOpencodeStreaming(
       const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      fullOutput += chunk;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-      for (const line of chunk.split("\n")) {
+      for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
         lineCount++;
 
-        const sessionMatch = trimmed.match(/\bsession[=:\s]+([a-zA-Z0-9_-]{8,})/i);
-        if (sessionMatch && sessionMatch[1] && !sessionId) {
-          sessionId = sessionMatch[1];
-          jobLog(jobId, `Detected session ID: ${sessionId}`);
+        let event: any;
+        try {
+          event = JSON.parse(trimmed);
+        } catch {
+          continue;
         }
 
-        const isMeaningful =
-          /^[▶✓✗►]/.test(trimmed) ||
-          /^\[\d{2}:\d{2}/.test(trimmed) ||
-          /^(Tool|Agent|Step|Writing|Reading|Running|Creating|Modifying|Analyzing|Planning|Building|Committing|Error)/.test(
-            trimmed,
-          );
+        // Extract session ID from first event
+        if (!sessionId && event.sessionID) {
+          sessionId = event.sessionID;
+          jobLog(jobId, `Session: ${sessionId}`);
+        }
 
-        if (isMeaningful) {
-          const clean = trimmed.replace(/\x1b\[[0-9;]*m/g, "").slice(0, 300);
-          await client.postStatus.mutate({ jobId, message: clean, level: "info" }).catch(() => {});
+        const result = handleJsonEvent(event, jobId, cwd);
+        if (result) {
+          await client.postStatus
+            .mutate({ jobId, message: result.message, level: result.level, append: result.append })
+            .catch(() => {});
+        }
+
+        // Accumulate text for plan fallback
+        if (event.type === "text" && event.part?.text?.trim()) {
+          textParts.push(event.part.text.trim());
         }
       }
     }
@@ -455,9 +623,28 @@ async function runOpencodeStreaming(
     reader.releaseLock();
   }
 
+  // Process any remaining buffered data
+  if (buffer.trim()) {
+    try {
+      const event = JSON.parse(buffer.trim());
+      if (!sessionId && event.sessionID) {
+        sessionId = event.sessionID;
+        jobLog(jobId, `Session: ${sessionId}`);
+      }
+      const result = handleJsonEvent(event, jobId, cwd);
+      if (result) {
+        await client.postStatus
+          .mutate({ jobId, message: result.message, level: result.level, append: result.append })
+          .catch(() => {});
+      }
+    } catch {
+      // ignore partial/invalid JSON in tail buffer
+    }
+  }
+
   const elapsed = (performance.now() - streamStart).toFixed(0);
   const [exitCode, stderr] = await Promise.all([proc.exited, stderrPromise]);
-  jobLog(jobId, `opencode process finished: exit ${exitCode}, ${lineCount} lines in ${elapsed}ms`);
+  jobLog(jobId, `opencode finished: exit ${exitCode}, ${lineCount} events in ${elapsed}ms`);
 
   if (exitCode !== 0) {
     jobLog(jobId, `opencode stderr: ${stderr.slice(0, 500)}`);
@@ -466,19 +653,19 @@ async function runOpencodeStreaming(
 
   jobLog(jobId, `Reading PLAN.md from ${cwd}/PLAN.md`);
   const planMd = await Bun.file(`${cwd}/PLAN.md`).text().catch(() => {
-    jobLog(jobId, `PLAN.md not found, using fullOutput fallback`);
+    if (textParts.length > 0) {
+      jobLog(jobId, `PLAN.md not found, fallback to ${textParts.length} text parts`);
+      return textParts.join("\n\n");
+    }
+    jobLog(jobId, `PLAN.md not found, no text fallback`);
     return "";
   });
 
   if (!sessionId) {
-    const m = fullOutput.match(/\bsession[=:\s]+([a-zA-Z0-9_-]{8,})/i);
-    if (m && m[1]) {
-      sessionId = m[1];
-      jobLog(jobId, `Session ID found via fallback scan: ${sessionId}`);
-    }
+    jobLog(jobId, `No session ID detected`);
   }
 
-  return { planMd: planMd || fullOutput, sessionId: sessionId || `fallback-${jobId}` };
+  return { planMd: planMd || "", sessionId: sessionId || `fallback-${jobId}` };
 }
 
 // ── Approval loop ────────────────────────────────────────────────────────────

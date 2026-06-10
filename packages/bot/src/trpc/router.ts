@@ -134,11 +134,21 @@ export const appRouter = t.router({
       const verboseSetting = await prisma.setting.findUnique({ where: { key: "verbose_mode" } });
       const verbose = verboseSetting?.value !== "off";
 
+      // Debug messages only show when verbose is on
+      if (input.level === "debug" && !verbose) return { success: true };
+      // Info messages hidden when verbose is off
       if (input.level === "info" && !verbose) return { success: true };
 
       const emoji =
-        input.level === "info" ? "ℹ️" : input.level === "success" ? "✅" : "❌";
-      await upsertStatusMessage(input.jobId, job.threadId, `${emoji} ${input.message}`);
+        input.level === "info" ? "ℹ️" :
+        input.level === "success" ? "✅" :
+        input.level === "debug" ? "🔍" : "❌";
+
+      if (input.append) {
+        await postToThread(job.threadId, `${emoji} ${input.message}`);
+      } else {
+        await upsertStatusMessage(input.jobId, job.threadId, `${emoji} ${input.message}`);
+      }
 
       return { success: true };
     }),

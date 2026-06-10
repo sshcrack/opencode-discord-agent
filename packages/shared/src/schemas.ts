@@ -72,6 +72,7 @@ export const PostStatusInput = z.object({
   jobId: z.number(),
   message: z.string(),
   level: StatusLevel,
+  append: z.boolean().optional().default(false),
 });
 
 export const ApproveJobInput = z.object({

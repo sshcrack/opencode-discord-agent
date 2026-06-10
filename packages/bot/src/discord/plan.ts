@@ -1,26 +1,33 @@
+import { deflateSync } from "node:zlib";
 import {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  TextChannel,
-  ThreadChannel,
-  Message,
 } from "discord.js";
 import { prisma } from "../db";
 import { getClient } from './helpers';
+
+function makePlanUrl(content: string): string {
+  const compressed = deflateSync(content);
+  const encoded = Buffer.from(compressed)
+    .toString("base64url")
+    .replace(/=+$/, "");
+  return `https://markdownviewer.pages.dev/#share=${encoded}&edit=1`;
+}
 
 export async function postPlan(
   job: { id: number; threadId: string; autoMode: boolean },
   planMd: string,
 ) {
-  const lines = planMd.split("\n").filter(l => l.trim());
-  const planPreview = lines.slice(0, 20).join("\n");
-  const truncated = lines.length > 20 ? `\n\n*...and ${lines.length - 20} more lines*` : "";
+  const planUrl = makePlanUrl(planMd);
 
   const embed = new EmbedBuilder()
     .setTitle("📋 Planning Complete")
-    .setDescription(`\`\`\`markdown\n${planPreview}${truncated}\n\`\`\``)
+    .setDescription(
+      `📝 [Open and edit the plan](${planUrl})\n` +
+      `After editing, submit the updated plan using the link above, or use the buttons below.`
+    )
     .setColor(0x5865f2);
 
   const ch = await getClient().channels.fetch(job.threadId);
@@ -83,7 +90,7 @@ export async function postPlan(
       .setStyle(ButtonStyle.Danger),
   );
 
-  if (ch) await ch.send({ embeds: [embed], components: [row] });
+  await ch.send({ embeds: [embed], components: [row] });
 
   return { success: true };
 }
