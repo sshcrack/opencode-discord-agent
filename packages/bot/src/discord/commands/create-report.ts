@@ -33,6 +33,14 @@ export class CreateReportCommand extends Command {
     const repoSlug = interaction.options.getString("repo");
     console.log("[CreateReportCommand] kind:", kind, "repoSlug:", repoSlug);
 
+    if (!interaction.channel || !interaction.channel.isTextBased() || interaction.channel.isThread() || !("threads" in interaction.channel)) {
+      await interaction.reply({
+        content: ":x: This command must be used in a guild text channel",
+        ephemeral: true,
+      });
+      return;
+    }
+
     let slug = repoSlug;
     if (!slug) {
       const defaultRepo = await prisma.repository.findFirst({ where: { isDefault: true } });
@@ -55,7 +63,8 @@ export class CreateReportCommand extends Command {
     const ts = Date.now().toString(36);
     const threadName = `${kind}-${ts}`;
 
-    const thread = await (interaction.channel as TextChannel).threads.create({
+    const channel = interaction.channel as TextChannel;
+    const thread = await channel.threads.create({
       name: threadName,
       type: ChannelType.PrivateThread,
       reason: `New ${kind} report`,

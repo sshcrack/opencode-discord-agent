@@ -75,7 +75,28 @@ export class RepoCommand extends Command {
         return;
       }
 
+      // Prevent removing repo with active jobs
+      const activeJobs = await prisma.job.count({
+        where: { repoSlug: slug, status: { in: ["pending", "claimed", "planning", "plan_ready", "approved", "building"] } },
+      });
+      if (activeJobs > 0) {
+        await interaction.reply({
+          content: `:x: Cannot remove \`${slug}\` — there are ${activeJobs} active job(s) associated with it`,
+          ephemeral: true,
+        });
+        return;
+      }
+
       const wasDefault = repo.isDefault;
+      const repoCount = await prisma.repository.count();
+      if (repoCount <= 1) {
+        await interaction.reply({
+          content: `:x: Cannot remove the last repository. Add another repository first.`,
+          ephemeral: true,
+        });
+        return;
+      }
+
       await prisma.repository.delete({ where: { slug } });
 
       if (wasDefault) {

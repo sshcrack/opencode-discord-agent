@@ -46,14 +46,18 @@ export async function buildContext(messages: Message[]): Promise<string> {
     let entry = message.content;
 
     if (message.attachments.size > 0) {
-      for (const [, attachment] of message.attachments) {
-        const name = attachment.name || "unnamed";
-        const content = await downloadAttachmentContent(attachment.url, name);
+      const results = await Promise.all(
+        message.attachments.map((attachment) => {
+          const name = attachment.name || "unnamed";
+          return downloadAttachmentContent(attachment.url, name).then(content => ({ name, url: attachment.url, content }));
+        }),
+      );
 
+      for (const { name, url, content } of results) {
         if (content !== null) {
           entry += `\n[file with name ${name}]\n\`\`\`\n# ${name}\n${content}\n\`\`\``;
         } else {
-          entry += `\n[file with name ${name}](${attachment.url})`;
+          entry += `\n[file with name ${name}](${url})`;
         }
       }
     }

@@ -24,7 +24,10 @@ export async function postPlan(
     .setColor(0x5865f2);
 
   const ch = await getClient().channels.fetch(job.threadId);
-  if (ch && !ch.isThread()) {
+  if (!ch) {
+    return { success: false, error: "Thread not found" };
+  }
+  if (!ch.isThread()) {
     console.warn(`Channel ${job.threadId} is not a thread`);
     return { success: false, error: "Channel is not a thread" };
   }
@@ -37,25 +40,19 @@ export async function postPlan(
         .setStyle(ButtonStyle.Danger),
     );
 
-    let countdownMsg: Message | undefined;
-    if (ch) {
-      await ch.send({ embeds: [embed], components: [cancelRow] });
-      countdownMsg = await ch.send("⏳ Auto-approving in **10** seconds... (click Cancel to abort)");
-    }
+    await ch.send({ embeds: [embed], components: [cancelRow] });
+    const countdownMsg = await ch.send("⏳ Auto-approving in **10** seconds... (click Cancel to abort)");
 
     for (let i = 9; i >= 0; i--) {
       await Bun.sleep(1000);
       const currentJob = await prisma.job.findUnique({ where: { id: job.id } });
       if (!currentJob || currentJob.status !== "plan_ready") {
-        // Cancelled during countdown
-        if (countdownMsg) await countdownMsg.edit("❌ Auto-approval cancelled.").catch(() => { });
+        await countdownMsg.edit("❌ Auto-approval cancelled.").catch(() => { });
         return { success: true };
       }
-      if (countdownMsg) {
-        await countdownMsg
-          .edit(`⏳ Auto-approving in **${i}** seconds... (click Cancel to abort)`)
-          .catch(() => { });
-      }
+      await countdownMsg
+        .edit(`⏳ Auto-approving in **${i}** seconds... (click Cancel to abort)`)
+        .catch(() => { });
     }
 
     const finalJob = await prisma.job.findUnique({ where: { id: job.id } });
@@ -64,7 +61,7 @@ export async function postPlan(
         where: { id: job.id },
         data: { status: "approved" },
       });
-      if (countdownMsg) await countdownMsg.edit("✅ Auto-approved, proceeding to build...").catch(() => { });
+      await countdownMsg.edit("✅ Auto-approved, proceeding to build...").catch(() => { });
       return { success: true, autoApproved: true };
     }
 

@@ -2,7 +2,8 @@ import { AutocompleteInteraction, ButtonInteraction, Message, Collection } from 
 import { prisma } from "../db";
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
-  const focused = interaction.options.getFocused().toString().toLowerCase();
+  const focusedValue = interaction.options.getFocused();
+  const focused = typeof focusedValue === "string" ? focusedValue.toLowerCase() : String(focusedValue);
   console.log("[handleAutocomplete] focused:", focused);
 
   const repos = await prisma.repository.findMany({
@@ -11,8 +12,11 @@ export async function handleAutocomplete(interaction: AutocompleteInteraction) {
   });
   console.log("[handleAutocomplete] found", repos.length, "repos");
 
+  // Filter case-insensitively in JS since SQLite doesn't support mode:"insensitive"
+  const filtered = repos.filter(r => r.slug.toLowerCase().includes(focused));
+
   await interaction.respond(
-    repos.map(r => ({ name: `${r.slug}${r.isDefault ? " (default)" : ""} — ${r.path}`, value: r.slug })),
+    filtered.map(r => ({ name: `${r.slug}${r.isDefault ? " (default)" : ""} — ${r.path}`, value: r.slug })),
   );
 }
 

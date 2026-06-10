@@ -1,6 +1,5 @@
 import { createTRPCClient, httpLink } from "@trpc/client";
 import type { AppRouter } from "@opencode-discord/shared";
-import { readFile } from "fs/promises";
 
 const {
   BOT_URL = "http://localhost:3000",
@@ -54,20 +53,16 @@ async function getIssueModel(): Promise<string> {
 
 let activeJobId: number | null = null;
 
-async function poll() {
+async function poll(): Promise<void> {
   const start = performance.now();
-  try {
-    const result = await client.pollNextJob.query({ workerId: WORKER_ID });
-    if (result) {
-      const elapsed = (performance.now() - start).toFixed(0);
-      workerLog(`Claimed job #${result.id} for repo ${result.repoSlug} (poll took ${elapsed}ms)`);
-      activeJobId = result.id;
-      handleJob(result).catch(err =>
-        jobLog(result.id, `Unhandled job error:`, err),
-      );
-    }
-  } catch (err) {
-    workerLog("Poll error:", err);
+  const result = await client.pollNextJob.query({ workerId: WORKER_ID });
+  if (result) {
+    const elapsed = (performance.now() - start).toFixed(0);
+    workerLog(`Claimed job #${result.id} for repo ${result.repoSlug} (poll took ${elapsed}ms)`);
+    activeJobId = result.id;
+    handleJob(result).catch(err =>
+      jobLog(result.id, `Unhandled job error:`, err),
+    );
   }
 }
 
@@ -415,8 +410,10 @@ async function runOpencodeStreaming(
 
   const reader = proc.stdout.getReader();
   const decoder = new TextDecoder();
-
   const streamStart = performance.now();
+
+  // Read stderr concurrently to prevent pipe buffer deadlock
+  const stderrPromise = new Response(proc.stderr).text();
 
   try {
     while (true) {
@@ -431,15 +428,12 @@ async function runOpencodeStreaming(
         if (!trimmed) continue;
         lineCount++;
 
-        // Extract session ID from opencode output (format: "session: <id>" or "session=<id>")
         const sessionMatch = trimmed.match(/\bsession[=:\s]+([a-zA-Z0-9_-]{8,})/i);
         if (sessionMatch && sessionMatch[1] && !sessionId) {
           sessionId = sessionMatch[1];
           jobLog(jobId, `Detected session ID: ${sessionId}`);
         }
 
-        // Post meaningful lines: tool calls, agent steps, file writes, etc.
-        // opencode typically prefixes meaningful lines with ▶, ✓, ✗, or timestamps
         const isMeaningful =
           /^[▶✓✗►]/.test(trimmed) ||
           /^\[\d{2}:\d{2}/.test(trimmed) ||
@@ -448,7 +442,6 @@ async function runOpencodeStreaming(
           );
 
         if (isMeaningful) {
-          // Strip ANSI codes
           const clean = trimmed.replace(/\x1b\[[0-9;]*m/g, "").slice(0, 300);
           await client.postStatus.mutate({ jobId, message: clean, level: "info" }).catch(() => {});
         }
@@ -459,22 +452,20 @@ async function runOpencodeStreaming(
   }
 
   const elapsed = (performance.now() - streamStart).toFixed(0);
-  const exitCode = await proc.exited;
+  const [exitCode, stderr] = await Promise.all([proc.exited, stderrPromise]);
   jobLog(jobId, `opencode process finished: exit ${exitCode}, ${lineCount} lines in ${elapsed}ms`);
 
   if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text();
     jobLog(jobId, `opencode stderr: ${stderr.slice(0, 500)}`);
     throw new Error(`opencode failed (exit ${exitCode}): ${stderr.slice(0, 500)}`);
   }
 
   jobLog(jobId, `Reading PLAN.md from ${cwd}/PLAN.md`);
-  const planMd = await readFile(`${cwd}/PLAN.md`, "utf-8").catch(() => {
+  const planMd = await Bun.file(`${cwd}/PLAN.md`).text().catch(() => {
     jobLog(jobId, `PLAN.md not found, using fullOutput fallback`);
     return "";
   });
 
-  // Fallback: scan full output for session ID
   if (!sessionId) {
     const m = fullOutput.match(/\bsession[=:\s]+([a-zA-Z0-9_-]{8,})/i);
     if (m && m[1]) {
@@ -649,30 +640,29 @@ async function runBuildAgent(
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
-function execCommand(cmd: string, args: string[], cwd?: string, jobId?: number): Promise<string> {
+async function execCommand(cmd: string, args: string[], cwd?: string, jobId?: number): Promise<string> {
   const jId = jobId ?? 0;
   jobLog(jId, `exec: ${cmd} ${args.join(" ")}${cwd ? ` (in ${cwd})` : ""}`);
-  return new Promise((resolve, reject) => {
-    const proc = Bun.spawn([cmd, ...args], {
-      cwd,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
 
-    Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]).then(([stdout, stderr, code]) => {
-      if (code === 0) {
-        jobLog(jId, `${cmd} OK (${stdout.length} bytes stdout)`);
-        resolve(stdout);
-      } else {
-        jobLog(jId, `${cmd} FAILED (exit ${code}): ${stderr.slice(0, 200)}`);
-        reject(new Error(`${cmd} failed (exit ${code}): ${stderr}`));
-      }
-    });
+  const proc = Bun.spawn([cmd, ...args], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
   });
+
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+
+  if (code === 0) {
+    jobLog(jId, `${cmd} OK (${stdout.length} bytes stdout)`);
+    return stdout;
+  }
+
+  jobLog(jId, `${cmd} FAILED (exit ${code}): ${stderr.slice(0, 200)}`);
+  throw new Error(`${cmd} failed (exit ${code}): ${stderr}`);
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -681,7 +671,8 @@ async function main() {
   console.log(`╔══════════════════════════════════════════════╗`);
   console.log(`║  Worker ${WORKER_ID.padEnd(10)}                 ║`);
   console.log(`║  Polling: ${BOT_URL}/trpc          ║`);
-  console.log(`║  Interval: 5s  |  Heartbeat: 30s            ║`);
+  console.log(`║  Interval: 5s (backoff: up to 60s)          ║`);
+  console.log(`║  Heartbeat: 30s                              ║`);
   console.log(`║  Mode: ${dryRun ? "🧪 DRY RUN" : "🔧 LIVE".padEnd(23)}           ║`);
   console.log(`╚══════════════════════════════════════════════╝`);
 
@@ -690,10 +681,21 @@ async function main() {
     heartbeat().catch(err => workerLog("Heartbeat error:", err));
   }, 30_000);
 
-  // Poll every 5s
-  setInterval(() => {
-    poll().catch(err => workerLog("Poll error:", err));
-  }, 5_000);
+  // Poll with exponential backoff on error (5s base, max 60s)
+  let pollInterval = 5_000;
+  const scheduleNextPoll = () => {
+    setTimeout(() => {
+      poll().then(success => {
+        pollInterval = 5_000;
+        scheduleNextPoll();
+      }).catch(err => {
+        workerLog(`Poll error (will retry in ${pollInterval / 1000}s):`, err);
+        pollInterval = Math.min(pollInterval * 2, 60_000);
+        scheduleNextPoll();
+      });
+    }, pollInterval);
+  };
+  scheduleNextPoll();
 }
 
 main().catch(console.error);
