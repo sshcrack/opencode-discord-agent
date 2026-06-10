@@ -133,6 +133,7 @@ async function handleJob(job: Job) {
   startTyping(job.threadId, job.id);
 
   const jobStart = performance.now();
+  let helperPath = "";
 
   try {
     // ── Step 1: Create worktree ────────────────────────────────────────────
@@ -149,6 +150,33 @@ async function handleJob(job: Job) {
     if (!dryRun) {
       await postDebug(job.id, `Worktree: \`${worktreePath}\` on branch \`${branch}\``);
     }
+
+    // Create Discord helper script for agent use
+    helperPath = `/tmp/opencode-discord-${job.id}.sh`;
+    const helperLines: string[] = [
+      '#!/bin/bash',
+      '',
+      `BOT_URL="${BOT_URL}"`,
+      `TOKEN="${SHARED_SECRET}"`,
+      `JOB_ID=${job.id}`,
+      '',
+      'if [ "$1" = "--rename" ]; then',
+      '  shift',
+      '  NAME="$*"',
+      '  curl -s -X POST "$BOT_URL/trpc/renameJobThread" \\',
+      '    -H "Authorization: Bearer $TOKEN" \\',
+      '    -H "Content-Type: application/json" \\',
+      "    -d '{\"0\":{\"jobId\":'\"$JOB_ID\"',\"name\":\"'\"$NAME\"'\"}}' > /dev/null",
+      'else',
+      '  curl -s -X POST "$BOT_URL/trpc/postStatus" \\',
+      '    -H "Authorization: Bearer $TOKEN" \\',
+      '    -H "Content-Type: application/json" \\',
+      "    -d '{\"0\":{\"jobId\":'\"$JOB_ID\"',\"message\":\"'\"$1\"'\",\"level\":\"'\"${2:-info}\"'\"}}' > /dev/null",
+      'fi',
+    ];
+    await Bun.write(helperPath, helperLines.join('\n'));
+    Bun.spawnSync(["chmod", "700", helperPath]);
+    jobLog(job.id, `Discord helper created at ${helperPath}`);
 
     // ── Step 2: Use pre-generated issue or generate one ────────────────────
     let issueNumber = job.issueNumber;
@@ -180,12 +208,36 @@ async function handleJob(job: Job) {
       }
     }
 
+    // Rename thread for pre-existing issues (was never renamed at creation)
+    if (issueNumber && job.issueNumber) {
+      jobLog(job.id, `Renaming thread for pre-existing issue #${issueNumber}...`);
+      if (dryRun) {
+        jobLog(job.id, `[DRY RUN] Would rename thread to #${issueNumber} {title}`);
+      } else {
+        const repoName = await getRepoNameWithOwner(repoPath);
+        if (repoName) {
+          const ghProc = Bun.spawn(["gh", "issue", "view", String(issueNumber), "--repo", repoName, "--json", "title", "--jq", ".title"], {
+            cwd: repoPath,
+            stdout: "pipe",
+            stderr: "pipe",
+          });
+          const title = (await new Response(ghProc.stdout).text()).trim();
+          const exitCode = await ghProc.exited;
+          if (title && exitCode === 0) {
+            const threadName = `#${issueNumber} ${title.replace(/^#+\s*/, "").trim()}`.slice(0, 100);
+            await client.renameJobThread.mutate({ jobId: job.id, name: threadName }).catch(() => {});
+            jobLog(job.id, `Thread renamed to: ${threadName}`);
+          }
+        }
+      }
+    }
+
     // ── Step 3: Plan agent ─────────────────────────────────────────────────
     jobLog(job.id, "Step 3/5: Running plan agent...");
     await postInfo(job.id, "Planning started — running opencode plan agent...");
 
     const planStart = performance.now();
-    const { planMd, sessionId } = await runPlanAgent(job, worktreePath, issueNumber);
+    const { planMd, sessionId } = await runPlanAgent(job, worktreePath, issueNumber, helperPath);
     jobLog(job.id, `Plan agent completed in ${(performance.now() - planStart).toFixed(0)}ms, session: ${sessionId}, plan length: ${planMd.length} chars`);
 
     await postInfo(job.id, "Planning complete, posting plan for review...");
@@ -196,7 +248,7 @@ async function handleJob(job: Job) {
 
     // ── Step 4: Approval loop ──────────────────────────────────────────────
     jobLog(job.id, "Step 4/5: Waiting for approval...");
-    const finalSessionId = await waitForApproval(job.id, sessionId, worktreePath, job);
+    const finalSessionId = await waitForApproval(job.id, sessionId, worktreePath, job, helperPath);
     if (finalSessionId === null) {
       jobLog(job.id, "Job was cancelled by user");
       // Close the GitHub issue since the plan was rejected
@@ -216,6 +268,7 @@ async function handleJob(job: Job) {
       });
       stopTyping();
       cleanupWorktree(repoPath, branch).catch(() => {});
+      Bun.spawnSync(["rm", "-f", helperPath]);
       activeJobId = null;
       return;
     }
@@ -226,7 +279,7 @@ async function handleJob(job: Job) {
     await postInfo(job.id, "Starting build agent...");
 
     const buildStart = performance.now();
-    const prUrl = await runBuildAgent(job.id, worktreePath, issueNumber, branch);
+    const prUrl = await runBuildAgent(job.id, worktreePath, issueNumber, branch, helperPath);
     jobLog(job.id, `Build agent completed in ${(performance.now() - buildStart).toFixed(0)}ms`);
 
     if (prUrl) {
@@ -258,6 +311,7 @@ async function handleJob(job: Job) {
     if (err?.stack) jobLog(job.id, `Stack: ${err.stack}`);
     console.error(err);
     stopTyping();
+    if (helperPath) Bun.spawnSync(["rm", "-f", helperPath]);
     await client.postStatus.mutate({
       jobId: job.id,
       message: `Job failed: ${err?.message ?? String(err)}`,
@@ -268,6 +322,7 @@ async function handleJob(job: Job) {
   const totalElapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
   jobLog(job.id, `Job finished in ${totalElapsed}s`);
   stopTyping();
+  Bun.spawnSync(["rm", "-f", helperPath]);
   activeJobId = null;
 }
 
@@ -334,11 +389,13 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
       `Repository: ${job.repoSlug}`,
       ``,
       `# CRITICAL — Output format:`,
-      `Your ENTIRE response must be ONLY the issue. No greetings, no explanations, no preamble.`,
-      `Line 1 MUST be the issue title directly — NOT "Here is the issue:" or any other prefix.`,
-      `Line 2+ is the issue body in Markdown.`,
-      `Do NOT wrap in code fences. Do NOT add any text before or after.`,
-      `First line = title. Rest = body.`,
+      `Wrap your issue in <issue> tags. Everything outside the tags is ignored.`,
+      `<issue>`,
+      `  <title>The issue title here</title>`,
+      `  <description>`,
+      `    The issue body in Markdown (can be multiple lines).`,
+      `  </description>`,
+      `</issue>`,
       ``,
       `## Report context:`,
       `Kind: ${job.kind}`,
@@ -421,12 +478,20 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
       return { issueNumber: null, issueTitle: "" };
     }
 
-    const lines = issueText.trim().split("\n");
-    const title =
-      lines[0]?.trim().replace(/^#+\s*/, "").trim() || `[${job.repoSlug}] ${job.kind} report`;
-    const body =
-      lines.slice(1).join("\n").trim() ||
-      `Automated ${job.kind} report for ${job.repoSlug}`;
+    const issueMatch = issueText.match(/<issue>([\s\S]*?)<\/issue>/i);
+    let title: string;
+    let body: string;
+    if (issueMatch?.[1]) {
+      const inner = issueMatch[1];
+      const titleMatch = inner.match(/<title>([\s\S]*?)<\/title>/i);
+      const bodyMatch = inner.match(/<description>([\s\S]*?)<\/description>/i);
+      title = titleMatch?.[1]?.trim() || `[${job.repoSlug}] ${job.kind} report`;
+      body = bodyMatch?.[1]?.trim() || `Automated ${job.kind} report for ${job.repoSlug}`;
+    } else {
+      const lines = issueText.trim().split("\n");
+      title = lines[0]?.trim().replace(/^#+\s*/, "").trim() || `[${job.repoSlug}] ${job.kind} report`;
+      body = lines.slice(1).join("\n").trim() || `Automated ${job.kind} report for ${job.repoSlug}`;
+    }
 
     jobLog(job.id, `Issue title: ${title.slice(0, 80)}${title.length > 80 ? "..." : ""}`);
     jobLog(job.id, `Issue body length: ${body.length} chars`);
@@ -474,11 +539,13 @@ async function runPlanAgent(
   job: Job,
   worktreePath: string,
   issueNumber: number | null,
+  helperPath: string,
 ): Promise<{ planMd: string; sessionId: string }> {
   const issueRef = issueNumber ? ` The related GitHub issue is #${issueNumber}.` : "";
   const contextBlock = job.context
     ? `\n\nThe following is the Discord report thread context with file attachments:\n${job.context}`
     : "";
+  const helperBlock = `\n\nYou can post messages to the Discord thread and interact with users by running \`${helperPath} info "your message"\`. You can also rename the thread with \`${helperPath} --rename "new name"\`. Use this to ask questions, confirm decisions, or get clarifications from the user.`;
   const prompt = [
     `You are a planning agent for a ${job.kind} task on repository ${job.repoSlug}.${issueRef}`,
     `Review the codebase and write a detailed implementation plan.`,
@@ -486,6 +553,7 @@ async function runPlanAgent(
     `The plan should cover: files to change, approach, and any risk areas.`,
     `After saving the plan file, report the exact path where it was saved by writing a single line at the end of your response in this exact format: PLAN_PATH:/path/to/your/plan.md`,
     contextBlock,
+    helperBlock,
   ].filter(Boolean).join(" ");
 
   jobLog(job.id, `Plan agent prompt length: ${prompt.length} chars, issueRef: ${!!issueNumber}, contextBlock: ${!!job.context}`);
@@ -568,6 +636,22 @@ function formatToolUse(part: any, cwd?: string): EventResult {
     case "glob": {
       const pattern = input.pattern || "";
       return { message: `🔍 \`${pattern}\``, level: "debug", append: true };
+    }
+
+    case "todowrite": {
+      const todos = input.todos || [];
+      if (!todos.length) return null;
+      const statusIcons: Record<string, string> = {
+        pending: "🔲",
+        in_progress: "🔄",
+        completed: "✅",
+        cancelled: "❌",
+      };
+      const lines = todos.map((t: any) => {
+        const icon = statusIcons[t.status] || "🔲";
+        return `${icon} ${t.content}`;
+      });
+      return { message: `📋 **Tasks:**\n${lines.join("\n")}`, level: "info", append: true };
     }
 
     default:
@@ -759,6 +843,7 @@ async function waitForApproval(
   sessionId: string,
   worktreePath: string,
   job: Job,
+  helperPath: string,
 ): Promise<string | null> {
   let currentSession = sessionId;
   let pollCount = 0;
@@ -842,6 +927,7 @@ async function waitForApproval(
           `The plan should cover: files to change, approach, and any risk areas.`,
           `After saving the plan file, report the exact path where it was saved by writing a single line at the end of your response in this exact format: PLAN_PATH:/path/to/your/plan.md`,
           current.context ? `\n\nDiscord report context:\n${current.context}` : "",
+          `\n\nYou can post messages to the Discord thread by running \`${helperPath} info "your message"\`. You can also rename the thread with \`${helperPath} --rename "new name"\`.`,
         ].filter(Boolean).join(" ");
         const result = await runOpencodeStreaming(
           jobId,
@@ -878,6 +964,7 @@ async function runBuildAgent(
   worktreePath: string,
   issueNumber: number | null,
   branch: string,
+  helperPath: string,
 ): Promise<string | null> {
   const issueRef = issueNumber
     ? `The related GitHub issue is #${issueNumber} — make sure the PR body contains "Closes #${issueNumber}".`
@@ -887,6 +974,7 @@ async function runBuildAgent(
     `Follow the plan in PLAN.md exactly to implement the required changes.`,
     issueRef,
     `When done, commit all changes with a clear message, push the branch, then create a pull request.`,
+    `\n\nYou can post messages to the Discord thread by running \`${helperPath} info "your message"\`. You can also rename the thread with \`${helperPath} --rename "new name"\`.`,
   ]
     .filter(Boolean)
     .join(" ");
