@@ -143,3 +143,8 @@ export const RenameThreadInput = z.object({
   jobId: z.number(),
   name: z.string().max(100),
 });
+
+export const MarkCompleteInput = z.object({
+  jobId: z.number(),
+  prUrl: z.string(),
+});

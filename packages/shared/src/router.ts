@@ -15,6 +15,7 @@ import {
   SetIssueNumberInput,
   RenameThreadInput,
   TypingInput,
+  MarkCompleteInput,
 } from "./schemas";
 
 const t = initTRPC.create();
@@ -99,6 +100,13 @@ export const appRouter = t.router({
 
   typing: t.procedure
     .input(TypingInput)
+    .output(StatusResult)
+    .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  markComplete: t.procedure
+    .input(MarkCompleteInput)
     .output(StatusResult)
     .mutation(async () => {
       throw new Error("Not implemented in shared package");

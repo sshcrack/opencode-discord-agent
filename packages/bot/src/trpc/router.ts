@@ -10,6 +10,7 @@ import {
   AckSuggestionInput,
   SetIssueNumberInput,
   RenameThreadInput,
+  MarkCompleteInput,
   JobSchema,
   StatusResult,
   GetSettingInput,
@@ -17,7 +18,7 @@ import {
   TypingInput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread, upsertStatusMessage, renameThread, getClient } from "../discord/helpers";
+import { postToThread, renameThread, getClient } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
 import type { Job } from "../db/generated/client";
 import { TextChannel, ThreadChannel } from "discord.js";
@@ -79,8 +80,7 @@ export const appRouter = t.router({
 
       if (!claimed) return null;
 
-      await upsertStatusMessage(
-        claimed.id,
+      await postToThread(
         claimed.threadId,
         `ℹ️ Worker **${input.workerId}** picked up the job`,
       );
@@ -148,11 +148,7 @@ export const appRouter = t.router({
         input.level === "success" ? "✅" :
         input.level === "debug" ? "🔍" : "❌";
 
-      if (input.append) {
-        await postToThread(job.threadId, `${emoji} ${input.message}`);
-      } else {
-        await upsertStatusMessage(input.jobId, job.threadId, `${emoji} ${input.message}`);
-      }
+      await postToThread(job.threadId, `${emoji} ${input.message}`);
 
       return { success: true };
     }),
@@ -184,7 +180,7 @@ export const appRouter = t.router({
         where: { id: input.jobId },
         data: { status: "cancelled" },
       });
-      await upsertStatusMessage(input.jobId, job.threadId, "❌ Job cancelled");
+      await postToThread(job.threadId, "❌ Job cancelled");
       return { success: true };
     }),
 
@@ -265,6 +261,27 @@ export const appRouter = t.router({
       } catch {
         return { success: false };
       }
+    }),
+
+  markComplete: t.procedure
+    .input(MarkCompleteInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const job = await prisma.job.findUnique({ where: { id: input.jobId } });
+      if (!job) return { success: false };
+
+      await prisma.job.update({
+        where: { id: input.jobId },
+        data: {
+          status: "done",
+          prUrl: input.prUrl,
+        },
+      });
+
+      await postToThread(job.threadId, `✅ PR created: ${input.prUrl}`);
+      await postToThread(job.threadId, `✅ Job complete! <@${job.reporterId}> your PR is ready!`);
+
+      return { success: true };
     }),
 });
 
