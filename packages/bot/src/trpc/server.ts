@@ -1,6 +1,6 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
-import { handlePlanGet, handlePlanPut } from "./planApi";
+import { handlePlanGet, handlePlanPut, handlePlanApprove } from "./planApi";
 
 let trpcServer: ReturnType<typeof Bun.serve> | null = null;
 
@@ -18,6 +18,17 @@ function guessMimeType(path: string): string {
   if (path.endsWith(".json")) return "application/json";
   if (path.endsWith(".woff2")) return "font/woff2";
   return "application/octet-stream";
+}
+
+function corsPreflight() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
 }
 
 export function getTRPCServer() {
@@ -38,7 +49,21 @@ export function createTRPCServer(port: number) {
 
       if (pathname.startsWith(PLAN_API_PREFIX)) {
         const rest = pathname.slice(PLAN_API_PREFIX.length);
+        const approveMatch = rest.match(/^\/(\d+)\/approve$/);
         const match = rest.match(/^\/(\d+)$/);
+
+        if (approveMatch) {
+          const jobId = parseInt(approveMatch[1]!, 10);
+          if (req.method === "POST") {
+            const token = url.searchParams.get("token");
+            return handlePlanApprove(jobId, token);
+          }
+          if (req.method === "OPTIONS") {
+            return corsPreflight();
+          }
+          return new Response("Method not allowed", { status: 405 });
+        }
+
         if (!match) {
           return new Response("Not found", { status: 404 });
         }
@@ -63,14 +88,7 @@ export function createTRPCServer(port: number) {
         }
 
         if (req.method === "OPTIONS") {
-          return new Response(null, {
-            status: 204,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type",
-            },
-          });
+          return corsPreflight();
         }
 
         return new Response("Method not allowed", { status: 405 });

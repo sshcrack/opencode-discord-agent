@@ -9313,12 +9313,14 @@ document.addEventListener("DOMContentLoaded", function () {
   function applyLockState(data) {
     var badge = document.getElementById('plan-viewer-badge');
     var submitBtn = document.getElementById('plan-viewer-submit');
+    var approveBtn = document.getElementById('plan-viewer-approve');
     var statusEl = document.getElementById('plan-viewer-status');
     if (!badge || !submitBtn) return;
     if (data.locked) {
       badge.textContent = '🔒 Locked';
       badge.className = 'plan-badge locked';
-      if (submitBtn) submitBtn.style.display = 'none';
+      submitBtn.style.display = 'none';
+      if (approveBtn) approveBtn.style.display = 'none';
       if (statusEl) statusEl.textContent = '';
       setViewMode('preview');
       markdownEditor.disabled = true;
@@ -9326,6 +9328,7 @@ document.addEventListener("DOMContentLoaded", function () {
       badge.textContent = '✏️ Editable';
       badge.className = 'plan-badge editable';
       submitBtn.style.display = '';
+      if (approveBtn) approveBtn.style.display = '';
       if (statusEl) statusEl.textContent = '';
       setViewMode('split');
       markdownEditor.disabled = false;
@@ -9364,6 +9367,37 @@ document.addEventListener("DOMContentLoaded", function () {
           showPlanToast('❌ ' + err.message);
           btn.disabled = false;
           btn.textContent = 'Submit Plan Revision';
+        });
+    });
+  }
+
+  var planApproveBtn = document.getElementById('plan-viewer-approve');
+  if (planApproveBtn) {
+    planApproveBtn.addEventListener('click', function() {
+      if (!window.__PLAN_MODE__) return;
+      var mode = window.__PLAN_MODE__;
+      var btn = planApproveBtn;
+      btn.disabled = true;
+      btn.textContent = 'Approving...';
+      fetch('/api/plans/' + mode.jobId + '/approve?token=' + encodeURIComponent(mode.token || ''), {
+        method: 'POST',
+      })
+        .then(function(r) {
+          if (r.status === 423) throw new Error('Plan is locked');
+          if (r.status === 401) throw new Error('No edit token provided');
+          if (r.status === 403) throw new Error('Invalid edit token');
+          if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Failed to approve'); });
+          return r.json();
+        })
+        .then(function() {
+          showPlanToast('✅ Plan approved! Proceeding to build...');
+          btn.textContent = 'Approved ✓';
+          applyLockState({ locked: true, status: 'approved' });
+        })
+        .catch(function(err) {
+          showPlanToast('❌ ' + err.message);
+          btn.disabled = false;
+          btn.textContent = '✅ Approve Plan';
         });
     });
   }
