@@ -86,6 +86,7 @@ No tests exist in this repo — `bun test` finds nothing.
 - **Worker doesn't clone repos** — assumes the registered path exists on disk. Uses `gwq` (git worktree manager) to create branches. Requires `gwq`, `opencode`, and `gh` CLI on PATH.
 - **env vars only for secrets/URLs** — models, auto-mode, verbose-mode are all stored in the `Setting` database table, not env.
 - **No `.github/` CI** — infrastructure-less design, runs on dev laptop.
+- **tRPC v11 HTTP body format**: The `fetchRequestHandler` has two distinct modes. For *single* calls (no `?batch=1` in URL), the POST body is `JSON.stringify(input)` directly — no wrapping. For *batch* calls (`?batch=1`), the body is `JSON.stringify({"0": input0, "1": input1, ...})`. The worker's bash helper curl calls must NOT use the `{"0": ...}` batch format unless the URL includes `?batch=1`.
 
 ## Key conventions
 
