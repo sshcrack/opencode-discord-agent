@@ -1,7 +1,24 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
+import { handlePlanGet, handlePlanPut } from "./planApi";
 
 let trpcServer: ReturnType<typeof Bun.serve> | null = null;
+
+const PLAN_VIEWER_PREFIX = "/plan-viewer";
+const PLAN_API_PREFIX = "/api/plans";
+const TRPC_PREFIX = "/trpc";
+
+function guessMimeType(path: string): string {
+  if (path.endsWith(".html")) return "text/html; charset=utf-8";
+  if (path.endsWith(".js")) return "application/javascript; charset=utf-8";
+  if (path.endsWith(".css")) return "text/css; charset=utf-8";
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".svg")) return "image/svg+xml";
+  if (path.endsWith(".json")) return "application/json";
+  if (path.endsWith(".woff2")) return "font/woff2";
+  return "application/octet-stream";
+}
 
 export function getTRPCServer() {
   return trpcServer;
@@ -15,10 +32,71 @@ export function stopTRPCServer() {
 export function createTRPCServer(port: number) {
   trpcServer = Bun.serve({
     port,
-    fetch(req) {
+    async fetch(req) {
       const url = new URL(req.url);
+      const { pathname } = url;
 
-      if (url.pathname.startsWith("/trpc")) {
+      if (pathname.startsWith(PLAN_API_PREFIX)) {
+        const rest = pathname.slice(PLAN_API_PREFIX.length);
+        const match = rest.match(/^\/(\d+)$/);
+        if (!match) {
+          return new Response("Not found", { status: 404 });
+        }
+        const jobId = parseInt(match[1]!, 10);
+
+        if (req.method === "GET") {
+          return handlePlanGet(jobId);
+        }
+
+        if (req.method === "PUT") {
+          const token = url.searchParams.get("token");
+          let body: any = {};
+          try {
+            body = await req.json();
+          } catch {
+            return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          return handlePlanPut(jobId, token, body);
+        }
+
+        if (req.method === "OPTIONS") {
+          return new Response(null, {
+            status: 204,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type",
+            },
+          });
+        }
+
+        return new Response("Method not allowed", { status: 405 });
+      }
+
+      if (pathname.startsWith(PLAN_VIEWER_PREFIX)) {
+        let filePath = pathname.slice(PLAN_VIEWER_PREFIX.length) || "/index.html";
+        if (filePath === "/" || filePath === "") {
+          filePath = "/index.html";
+        }
+
+        const dir = import.meta.dir ?? "";
+        const fullPath = `${dir}/../../public/plan-viewer${filePath}`;
+        const file = Bun.file(fullPath);
+        const exists = await file.exists();
+        if (!exists) {
+          return new Response("Not found", { status: 404 });
+        }
+
+        const mime = guessMimeType(filePath);
+        return new Response(file, {
+          headers: { "Content-Type": mime },
+        });
+      }
+
+      if (pathname.startsWith(TRPC_PREFIX)) {
         const authHeader = req.headers.get("authorization");
         const expected = `Bearer ${process.env.SHARED_SECRET}`;
         if (!authHeader || authHeader !== expected) {
@@ -26,7 +104,7 @@ export function createTRPCServer(port: number) {
         }
 
         return fetchRequestHandler({
-          endpoint: "/trpc",
+          endpoint: TRPC_PREFIX,
           req,
           router: appRouter,
           createContext: () => ({}),

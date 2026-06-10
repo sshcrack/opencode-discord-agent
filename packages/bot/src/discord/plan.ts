@@ -1,4 +1,3 @@
-import { deflateSync, inflateSync } from "node:zlib";
 import {
   EmbedBuilder,
   ActionRowBuilder,
@@ -7,105 +6,21 @@ import {
 } from "discord.js";
 import { prisma } from "../db";
 import { getClient } from './helpers';
-
-const MARKDOWN_VIEWER_PREFIX = "https://markdownviewer.pages.dev/#share=";
-
-async function makePlanUrl(content: string): Promise<string> {
-  const compressed = deflateSync(content);
-  const encoded = Buffer.from(compressed)
-    .toString("base64url")
-    .replace(/=+$/, "");
-  const url = `${MARKDOWN_VIEWER_PREFIX}${encoded}&edit=1`;
-
-  // If URL + surrounding text fits in Discord's 4096-char embed description, use it directly
-  // (description overhead with ping is ~140 chars)
-  if (url.length <= 3950) return url;
-
-  // URL too long — try shortening via is.gd
-  try {
-    const shortUrl = await shortenUrl(url);
-    if (shortUrl) return shortUrl;
-  } catch {
-    // fall through
-  }
-
-  // Fallback: truncate content and regenerate
-  let truncated = content;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    truncated = truncated.slice(0, Math.floor(truncated.length * 0.7)) +
-      "\n\n*... truncated ...*";
-    const recompressed = deflateSync(truncated);
-    const reencoded = Buffer.from(recompressed)
-      .toString("base64url")
-      .replace(/=+$/, "");
-    const retryUrl = `${MARKDOWN_VIEWER_PREFIX}${reencoded}&edit=1`;
-    if (retryUrl.length <= 3950) return retryUrl;
-  }
-
-  return url;
-}
-
-async function shortenUrl(url: string): Promise<string | null> {
-  const res = await fetch(
-    `https://is.gd/create.php?format=simple&url=${encodeURIComponent(url)}`,
-  );
-  if (!res.ok) return null;
-  const text = await res.text();
-  return text.trim() || null;
-}
-
-/**
- * Follow an is.gd (or similar) short URL to get the real redirect target.
- */
-async function resolveUrl(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, { method: "HEAD", redirect: "manual" });
-    const location = res.headers.get("location");
-    if (location) return resolveUrl(location);
-    return url;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Decode a markdown viewer URL back to the original plan markdown.
- * Format: https://markdownviewer.pages.dev/#share={base64url(deflate(content))}&edit=1
- */
-export function decodePlanUrl(url: string): string | null {
-  try {
-    const hashMatch = url.match(/#share=([A-Za-z0-9_-]+)/);
-    if (!hashMatch?.[1]) return null;
-    const compressed = Buffer.from(hashMatch[1], "base64url");
-    return inflateSync(compressed).toString("utf-8");
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Given a URL (markdown viewer or shortened), extract the plan markdown.
- * Follows short URLs to resolve the real target first.
- */
-export async function extractPlanFromUrl(url: string): Promise<string | null> {
-  const trimmed = url.trim();
-
-  // If it's already a markdown viewer URL, decode directly
-  if (trimmed.includes(MARKDOWN_VIEWER_PREFIX.replace("https://", ""))) {
-    return decodePlanUrl(trimmed);
-  }
-
-  // Otherwise try to follow redirect (e.g. is.gd) and decode the result
-  const resolved = await resolveUrl(trimmed);
-  if (!resolved || resolved === trimmed) return null;
-  return decodePlanUrl(resolved);
-}
+import crypto from "node:crypto";
 
 export async function postPlan(
   job: { id: number; threadId: string; autoMode: boolean; reporterId: string | null },
   planMd: string,
 ) {
-  const planUrl = await makePlanUrl(planMd);
+  const token = crypto.randomUUID();
+
+  await prisma.job.update({
+    where: { id: job.id },
+    data: { planEditToken: token },
+  });
+
+  const botUrl = (process.env.BOT_URL || "http://localhost:3000").replace(/\/+$/, "");
+  const planUrl = `${botUrl}/plan-viewer/?jobId=${job.id}&token=${token}`;
   const ping = job.reporterId ? `<@${job.reporterId}> ` : "";
 
   const embed = new EmbedBuilder()

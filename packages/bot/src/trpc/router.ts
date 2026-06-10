@@ -40,6 +40,7 @@ function toJobOutput(job: Job) {
     prUrl: job.prUrl,
     autoMode: job.autoMode,
     pendingSuggestion: job.pendingSuggestion,
+    planEditToken: job.planEditToken,
   };
 }
 

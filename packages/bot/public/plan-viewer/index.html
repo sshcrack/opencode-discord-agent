@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- DNS Prefetch & Preconnect CDN Origins to Warm Up Latency -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+
+    <!-- PERF-015: Preload critical-path resources for faster discovery -->
+    <link rel="preload" href="styles.css" as="style">
+    <link rel="preload" href="script.js" as="script">
+
+    <!-- Canonical Link -->
+    <link rel="canonical" href="https://markdownviewer.pages.dev/">
+
+    <!-- Multilingual Hreflang Tags for Search Crawlers -->
+    <link rel="alternate" hreflang="x-default" href="https://markdownviewer.pages.dev/" />
+    <link rel="alternate" hreflang="en" href="https://markdownviewer.pages.dev/?lang=en" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://markdownviewer.pages.dev/?lang=zh" />
+    <link rel="alternate" hreflang="ja" href="https://markdownviewer.pages.dev/?lang=ja" />
+    <link rel="alternate" hreflang="ko" href="https://markdownviewer.pages.dev/?lang=ko" />
+    <link rel="alternate" hreflang="pt-BR" href="https://markdownviewer.pages.dev/?lang=pt" />
+    <link rel="alternate" hreflang="es" href="https://markdownviewer.pages.dev/?lang=es" />
+    <link rel="alternate" hreflang="fr" href="https://markdownviewer.pages.dev/?lang=fr" />
+    <link rel="alternate" hreflang="de" href="https://markdownviewer.pages.dev/?lang=de" />
+    <link rel="alternate" hreflang="ru" href="https://markdownviewer.pages.dev/?lang=ru" />
+    <link rel="alternate" hreflang="it" href="https://markdownviewer.pages.dev/?lang=it" />
+    <link rel="alternate" hreflang="tr" href="https://markdownviewer.pages.dev/?lang=tr" />
+    <link rel="alternate" hreflang="pl" href="https://markdownviewer.pages.dev/?lang=pl" />
+    <link rel="alternate" hreflang="zh-Hant" href="https://markdownviewer.pages.dev/?lang=tw" />
+    <link rel="alternate" hreflang="uk" href="https://markdownviewer.pages.dev/?lang=uk" />
+    <!-- PWA Web Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Primary Meta Tags -->
+    <meta name="title" content="Markdown Viewer">
+    <meta name="description" content="Markdown Viewer is a powerful GitHub-style Markdown rendering tool with live preview, LaTeX math, Mermaid diagrams, syntax highlighting, dark mode, and export options to PDF, HTML, and MD—all fully client-side and secure.">
+    <meta name="keywords" content="Markdown Viewer, GitHub-style markdown, live preview, markdown editor, LaTeX support, Mermaid diagrams, PDF export, syntax highlighting, markdown to HTML, secure markdown tool, client-side markdown viewer, ThisIs-Developer, advanced markdown parser, future markdown viewer, next-gen markdown tool">
+    <meta name="author" content="ThisIs-Developer">
+    <meta name="robots" content="index, follow">
+    <meta name="language" content="English">
+    <meta name="distribution" content="global">
+    <meta name="rating" content="general">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://markdownviewer.pages.dev/">
+    <meta property="og:title" content="Markdown Viewer">
+    <meta property="og:description" content="Markdown Viewer is a powerful GitHub-style Markdown rendering tool with live preview, LaTeX math, Mermaid diagrams, syntax highlighting, dark mode, and export options to PDF, HTML, and MD—all fully client-side and secure.">
+    <meta property="og:image" content="https://markdownviewer.pages.dev/assets/icon.jpg">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://markdownviewer.pages.dev/">
+    <meta property="twitter:title" content="Markdown Viewer">
+    <meta property="twitter:description" content="Markdown Viewer is a powerful GitHub-style Markdown rendering tool with live preview, LaTeX math, Mermaid diagrams, syntax highlighting, dark mode, and export options to PDF, HTML, and MD—all fully client-side and secure.">
+    <meta property="twitter:image" content="https://markdownviewer.pages.dev/assets/icon.jpg">
+
+    <!-- JSON-LD Structured Data Schema for Search Rich Snippets -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Markdown Viewer",
+      "url": "https://markdownviewer.pages.dev/",
+      "image": "https://markdownviewer.pages.dev/assets/icon.jpg",
+      "description": "A powerful GitHub-style Markdown rendering tool with live preview, LaTeX, Mermaid, syntax highlighting, and PDF export.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "All",
+      "browserRequirements": "Requires HTML5 compatible browser",
+      "author": {
+        "@type": "Organization",
+        "name": "ThisIs-Developer",
+        "url": "https://github.com/ThisIs-Developer"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0.00",
+        "priceCurrency": "USD"
+      }
+    }
+    </script>
+
+    <title>Markdown Viewer</title>
+    <link href="assets/icon.jpg" rel="icon" type="image/jpg">
+    <!-- Updated libraries to latest versions with Subresource Integrity (SRI) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.3.0/github-markdown.min.css" integrity="sha384-hZuxRjC/Dsr4zEx1JlUhDQqkvqBPp2VLHsgXfnxPq1ULDy1eIdWCiux7nvO1RIZP" crossorigin="anonymous">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" as="style" integrity="sha384-XGjxtQfXaH2tnPFa9x+ruJTuLE3Aa6LhHSWRr1XeTyhezb4abCG4ccI5AkVDxqC+" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" integrity="sha384-XGjxtQfXaH2tnPFa9x+ruJTuLE3Aa6LhHSWRr1XeTyhezb4abCG4ccI5AkVDxqC+" crossorigin="anonymous"></noscript>
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Loading order optimized - ensure libraries are loaded asynchronously using defer -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js" integrity="sha384-odPBjvtXVM/5hOYIr3A1dB+flh0c3wAT3bSesIOqEGmyUA4JoKf/YTWy0XKOYAY7" crossorigin="anonymous" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js" integrity="sha384-3HPB1XT51W3gGRxAmZ+qbZwRpRlFQL632y8x+adAqCr4Wp3TaWwCLSTAJJKbyWEK" crossorigin="anonymous" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js" integrity="sha384-PlRSzpewlarQuj5alIadXwjNUX+2eNMKwr0f07ShWYLy8B6TjEbm7ZlcN/ScSbwy" crossorigin="anonymous" defer></script>
+    <!-- PERF-002: MathJax, Mermaid, JoyPixels, jsPDF, html2canvas, pako are now lazy-loaded by script.js on first use -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js" integrity="sha384-+pxiN6T7yvpryuJmE1gM9PX7yQit15auDb+ZwwvJOd/4be2Cie5/IuVXgQb/S9du" crossorigin="anonymous" defer></script>
+    <script>
+    (function() {
+      var p = new URLSearchParams(window.location.search);
+      var jobId = p.get('jobId');
+      if (jobId) {
+        window.__PLAN_MODE__ = { jobId: parseInt(jobId), token: p.get('token') };
+      }
+    })();
+    </script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="container-fluid d-flex justify-content-between align-items-center header-container">
+                <!-- Left section: Logo, GitHub, Stats -->
+                <div class="d-flex align-items-center header-left">
+                    <h1 class="h4 mb-0 me-2">Markdown Viewer</h1>
+                    <a href="https://github.com/ThisIs-Developer/Markdown-Viewer/" class="github-link" title="View on GitHub" target="_blank" rel="noopener noreferrer">
+                        <i class="bi bi-github"></i>
+                    </a>
+                    <div id="stats-container" class="stats-container d-flex align-items-center d-none d-md-flex">
+                        <div class="stat-item me-3">
+                            <i class="bi bi-clock me-1"></i> <span id="reading-time">0</span> <span id="lbl-min-read">Min Read</span>
+                        </div>
+                        <div class="stat-item me-3">
+                            <i class="bi bi-text-paragraph me-1"></i> <span id="word-count">0</span> <span id="lbl-words">Words</span>
+                        </div>
+                        <div class="stat-item">
+                            <i class="bi bi-fonts me-1"></i> <span id="char-count">0</span> <span id="lbl-chars">Chars</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right section: Toolbar -->
+                <div class="toolbar d-none d-md-flex header-right">
+                    <div class="toolbar-group view-toolbar" role="group" aria-label="View mode">
+                        <button class="tool-button view-toggle-btn" data-view-mode="editor" aria-pressed="false" title="Editor only" aria-label="Editor only">
+                            <i class="bi bi-file-text"></i>
+                        </button>
+                        <button class="tool-button view-toggle-btn is-active" data-view-mode="split" aria-pressed="true" title="Split view" aria-label="Split view">
+                            <i class="bi bi-layout-split"></i>
+                        </button>
+                        <button class="tool-button view-toggle-btn" data-view-mode="preview" aria-pressed="false" title="Preview only" aria-label="Preview only">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                    <span class="toolbar-divider" aria-hidden="true"></span>
+                    <button id="toggle-sync" class="tool-button sync-enabled sync-active" title="Toggle Sync Scrolling">
+                        <i class="bi bi-link"></i> <span class="btn-text">Sync Off</span>
+                    </button>
+                    <div class="dropdown">
+                        <button class="tool-button dropdown-toggle" type="button" id="importDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Import Markdown">
+                            <i class="bi bi-upload"></i> <span class="btn-text">Import</span>
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="importDropdown">
+                            <li><a class="dropdown-item" href="#" id="import-from-file"><i class="bi bi-upload me-2"></i>From files</a></li>
+                            <li><a class="dropdown-item" href="#" id="import-from-github"><i class="bi bi-github me-2"></i>From GitHub</a></li>
+                        </ul>
+                    </div>
+                    <input type="file" id="file-input" class="file-input" accept=".md,.markdown,text/markdown">
+                    
+                    <div class="dropdown">
+                        <button class="tool-button dropdown-toggle" type="button" id="exportDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Export Markdown">
+                            <i class="bi bi-download"></i> <span class="btn-text">Export</span>
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="exportDropdown">
+                            <li><a class="dropdown-item" href="#" id="export-md"><i class="bi bi-file-earmark-text me-2"></i>Markdown (.md)</a></li>
+                            <li><a class="dropdown-item" href="#" id="export-html"><i class="bi bi-file-earmark-code me-2"></i>HTML</a></li>
+                            <li><a class="dropdown-item" href="#" id="export-pdf"><i class="bi bi-file-earmark-pdf me-2"></i>PDF</a></li>
+                        </ul>
+                    </div>
+                    
+                    <button id="copy-markdown-button" class="tool-button" title="Copy Markdown">
+                        <i class="bi bi-clipboard"></i> <span class="btn-text">Copy</span>
+                    </button>
+                    
+                    <button id="share-button" class="tool-button" title="Share via URL">
+                        <i class="bi bi-share"></i> <span class="btn-text">Share</span>
+                    </button>
+                    
+                    <div class="dropdown me-1">
+                        <button class="tool-button dropdown-toggle" type="button" id="languageDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Switch Language">
+                            <i class="bi bi-translate"></i> <span id="current-lang-label" class="btn-text">English</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="languageDropdown">
+                            <li><a class="dropdown-item lang-select-item active" href="#" data-lang="en">🇺🇸 English</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="zh">🇨🇳 简体中文</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="ja">🇯🇵 日本語</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="ko">🇰🇷 한국어</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="pt">🇧🇷 Português (Brasil)</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="es">🇪🇸 Español</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="fr">🇫🇷 Français</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="de">🇩🇪 Deutsch</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="ru">🇷🇺 Русский</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="it">🇮🇹 Italiano</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="tr">🇹🇷 Türkçe</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="pl">🇵🇱 Polski</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="tw">🇹🇼 繁體中文</a></li>
+                            <li><a class="dropdown-item lang-select-item" href="#" data-lang="uk">🇺🇦 Українська</a></li>
+                        </ul>
+                    </div>
+
+                    <button id="theme-toggle" class="tool-button" title="Toggle Dark Mode">
+                        <i class="bi bi-moon"></i>
+                    </button>
+                </div>
+                
+                <!-- Hamburger menu for mobile -->
+                <div class="mobile-menu d-md-none">
+                    <button id="mobile-menu-toggle" class="tool-button" title="Menu">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    
+                    <div id="mobile-menu-panel" class="mobile-menu-panel">
+                        <div class="mobile-menu-header">
+                            <h2 class="h5 m-0">Menu</h2>
+                            <button id="close-mobile-menu" class="tool-button" aria-label="Close menu">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+
+                        <!-- Mobile Document Tabs Section -->
+                        <div class="mobile-tabs-section mb-3">
+                            <div class="mobile-tabs-header">
+                                <span class="mobile-tabs-label"><i class="bi bi-files me-1"></i> Documents</span>
+                                <button id="mobile-new-tab-btn" class="mobile-new-tab-btn" title="New document" aria-label="New document">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                            <div id="mobile-tab-list" class="mobile-tab-list" role="tablist" aria-label="Document tabs">
+                                <!-- Dynamically populated by JavaScript -->
+                            </div>
+                            <button id="mobile-tab-reset-btn" class="tab-reset-btn mt-2 w-100" title="Reset all files" aria-label="Reset all files">
+                                <i class="bi bi-arrow-counterclockwise"></i> Reset all files
+                            </button>
+                        </div>
+
+                        <!-- Story 1.4: Mobile View Mode Buttons -->
+                        <div class="mobile-view-mode-group mb-3" role="group" aria-label="View mode">
+                            <button class="mobile-view-mode-btn" data-mode="editor" aria-pressed="false" title="Editor only">
+                                <i class="bi bi-file-text"></i>
+                                <span>Editor</span>
+                            </button>
+                            <button class="mobile-view-mode-btn active" data-mode="split" aria-pressed="true" title="Split view">
+                                <i class="bi bi-layout-split"></i>
+                                <span>Split</span>
+                            </button>
+                            <button class="mobile-view-mode-btn" data-mode="preview" aria-pressed="false" title="Preview only">
+                                <i class="bi bi-eye"></i>
+                                <span>Preview</span>
+                            </button>
+                        </div>
+
+                        <div class="mobile-stats-container mb-3">
+                            <div class="stat-item mb-2">
+                                <i class="bi bi-clock me-1"></i> <span id="mobile-reading-time">0</span> <span id="lbl-mobile-min-read">Min Read</span>
+                            </div>
+                            <div class="stat-item mb-2">
+                                <i class="bi bi-text-paragraph me-1"></i> <span id="mobile-word-count">0</span> <span id="lbl-mobile-words">Words</span>
+                            </div>
+                            <div class="stat-item">
+                                <i class="bi bi-fonts me-1"></i> <span id="mobile-char-count">0</span> <span id="lbl-mobile-chars">Chars</span>
+                            </div>
+                        </div>
+
+                        <div class="mobile-menu-items">
+                            <button id="mobile-toggle-sync" class="mobile-menu-item tool-button sync-enabled sync-active" title="Toggle Sync Scrolling">
+                                <i class="bi bi-link"></i> Sync Off
+                            </button>
+                            
+                            <button id="mobile-import-button" class="mobile-menu-item" title="Import from files">
+                                <i class="bi bi-upload me-2"></i> Import from files
+                            </button>
+                            
+                            <button id="mobile-import-github-button" class="mobile-menu-item" title="Import from GitHub">
+                                <i class="bi bi-github me-2"></i> Import from GitHub
+                            </button>
+                            
+                            <button id="mobile-export-md" class="mobile-menu-item" title="Export as Markdown">
+                                <i class="bi bi-file-earmark-text me-2"></i> Export as Markdown
+                            </button>
+                            
+                            <button id="mobile-export-html" class="mobile-menu-item" title="Export as HTML">
+                                <i class="bi bi-file-earmark-code me-2"></i> Export as HTML
+                            </button>
+                            
+                            <button id="mobile-export-pdf" class="mobile-menu-item" title="Export as PDF">
+                                <i class="bi bi-file-earmark-pdf me-2"></i> Export as PDF
+                            </button>
+                            
+                            <button id="mobile-copy-markdown" class="mobile-menu-item" title="Copy Markdown">
+                                <i class="bi bi-clipboard me-2"></i> Copy
+                            </button>
+                            
+                            <button id="mobile-share-button" class="mobile-menu-item" title="Share via URL">
+                                <i class="bi bi-share me-2"></i> Share
+                            </button>
+                            
+                            <div class="mobile-menu-item dropdown w-100 p-0 border-0">
+                                <button class="mobile-menu-item w-100 text-start dropdown-toggle" type="button" id="mobileLanguageDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Switch Language">
+                                    <i class="bi bi-translate me-2"></i> Language: <span id="mobile-current-lang-label">English</span>
+                                </button>
+                                <ul class="dropdown-menu w-100" aria-labelledby="mobileLanguageDropdown">
+                                    <li><a class="dropdown-item lang-select-item active" href="#" data-lang="en">us English</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="zh">CN 简体中文</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="ja">JP 日本語</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="ko">KR 한국어</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="pt">BR Português (Brasil)</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="es">ES Español</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="fr">FR Français</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="de">DE Deutsch</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="ru">RU Русский</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="it">IT Italiano</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="tr">TR Türkçe</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="pl">PL Polski</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="tw">TW 繁體中文</a></li>
+                                    <li><a class="dropdown-item lang-select-item" href="#" data-lang="uk">UK Українська</a></li>
+                                </ul>
+                            </div>
+                            <button id="mobile-theme-toggle" class="mobile-menu-item" title="Toggle Dark Mode">
+                                <i class="bi bi-moon me-2"></i> Dark Mode
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="mobile-menu-overlay"></div>
+                </div>
+            </div>
+        </header>
+
+        <div id="plan-viewer-bar" style="display:none" role="status">
+          <div class="plan-bar-left">
+            <span class="plan-bar-title">📋 Plan Viewer</span>
+            <span id="plan-viewer-status" class="plan-bar-status"></span>
+          </div>
+          <div class="plan-bar-right">
+            <span id="plan-viewer-badge" class="plan-badge"></span>
+            <button id="plan-viewer-submit" class="btn btn-sm btn-light" style="display:none">Submit Plan Revision</button>
+            <button id="plan-viewer-refresh" class="btn btn-sm plan-refresh-btn" title="Refresh plan">↻</button>
+          </div>
+        </div>
+        <!-- Tab Bar -->
+        <div class="tab-bar" id="tab-bar">
+          <div class="tab-list" id="tab-list" role="tablist" aria-label="Document tabs"></div>
+          <button class="tab-new-btn" id="tab-new-btn" title="New Tab (Ctrl+T)" aria-label="Open new tab">
+            <i class="bi bi-plus-lg"></i> New Tab
+          </button>
+          <button class="tab-reset-btn" id="tab-reset-btn" title="Reset all files" aria-label="Reset all files">
+            <i class="bi bi-arrow-counterclockwise"></i> Reset
+          </button>
+        </div>
+
+        <!-- Markdown Formatting Toolbar -->
+        <div class="markdown-format-toolbar" id="markdown-format-toolbar" role="toolbar" aria-label="Markdown formatting toolbar">
+          <div class="markdown-toolbar-group">
+            <button type="button" class="markdown-tool-btn" data-md-action="undo" title="Undo" aria-label="Undo"><i class="bi bi-arrow-counterclockwise"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="redo" title="Redo" aria-label="Redo"><i class="bi bi-arrow-clockwise"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="clear-formatting" title="Clear document" aria-label="Clear document"><i class="bi bi-eraser"></i></button>
+          </div>
+          <div class="markdown-toolbar-group">
+            <button type="button" class="markdown-tool-btn" data-md-action="bold" title="Bold" aria-label="Bold"><i class="bi bi-type-bold"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="strike" title="Strikethrough" aria-label="Strikethrough"><i class="bi bi-type-strikethrough"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="italic" title="Italic" aria-label="Italic"><i class="bi bi-type-italic"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="quote" title="Blockquote" aria-label="Blockquote"><i class="bi bi-quote"></i></button>
+            <button type="button" class="markdown-tool-btn text-tool" data-md-action="title-case" title="Title case" aria-label="Title case">Aa</button>
+            <button type="button" class="markdown-tool-btn text-tool" data-md-action="uppercase" title="Uppercase" aria-label="Uppercase">A</button>
+            <button type="button" class="markdown-tool-btn text-tool" data-md-action="lowercase" title="Lowercase" aria-label="Lowercase">a</button>
+          </div>
+          <div class="markdown-toolbar-group">
+            <button type="button" class="markdown-tool-btn" data-md-action="align-left" title="Align left" aria-label="Align left"><i class="bi bi-text-left"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="align-center" title="Align center" aria-label="Align center"><i class="bi bi-text-center"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="align-right" title="Align right" aria-label="Align right"><i class="bi bi-text-right"></i></button>
+            <button type="button" id="direction-toggle" class="markdown-tool-btn text-tool" title="Switch to RTL" aria-label="Toggle text direction" aria-pressed="false">L</button>
+          </div>
+          <div class="markdown-toolbar-group heading-group">
+            <button type="button" class="markdown-tool-btn text-tool" data-md-action="heading" data-md-level="1" title="Heading 1" aria-label="Heading 1">H1</button>
+            <button type="button" class="markdown-tool-btn text-tool" data-md-action="heading" data-md-level="2" title="Heading 2" aria-label="Heading 2">H2</button>
+            <button type="button" class="markdown-tool-btn text-tool" data-md-action="heading" data-md-level="3" title="Heading 3" aria-label="Heading 3">H3</button>
+            <button type="button" class="markdown-tool-btn text-tool" data-md-action="heading" data-md-level="4" title="Heading 4" aria-label="Heading 4">H4</button>
+            <button type="button" class="markdown-tool-btn text-tool" data-md-action="heading" data-md-level="5" title="Heading 5" aria-label="Heading 5">H5</button>
+            <button type="button" class="markdown-tool-btn text-tool" data-md-action="heading" data-md-level="6" title="Heading 6" aria-label="Heading 6">H6</button>
+          </div>
+          <div class="markdown-toolbar-group">
+            <button type="button" class="markdown-tool-btn" data-md-action="unordered-list" title="Bulleted list" aria-label="Bulleted list"><i class="bi bi-list-ul"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="ordered-list" title="Numbered list" aria-label="Numbered list"><i class="bi bi-list-ol"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="horizontal-rule" title="Horizontal rule" aria-label="Horizontal rule"><i class="bi bi-dash-lg"></i></button>
+          </div>
+          <div class="markdown-toolbar-group">
+            <button type="button" class="markdown-tool-btn" data-md-action="link" title="Link" aria-label="Link"><i class="bi bi-link-45deg"></i></button>
+            <button type="button" class="markdown-tool-btn text-tool" data-md-action="reference" title="Reference" aria-label="Reference"><i></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="image" title="Image" aria-label="Image"><i class="bi bi-card-image"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="inline-code" title="Inline code" aria-label="Inline code"><i class="bi bi-code-slash"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="code-block" title="Code block" aria-label="Code block"><i class="bi bi-file-code"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="terminal-block" title="Terminal block" aria-label="Terminal block"><i class="bi bi-terminal"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="table" title="Table" aria-label="Table"><i class="bi bi-table"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="date-time" title="Date and time" aria-label="Date and time"><i class="bi bi-clock"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="emoji" title="Emoji shortcode" aria-label="Emoji shortcode"><i class="bi bi-emoji-smile"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="symbols" title="Symbols &amp; HTML entities" aria-label="Symbols &amp; HTML entities"><i class="bi bi-c-circle"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="alert" title="Markdown alert" aria-label="Markdown alert"><i class="bi bi-newspaper"></i></button>
+          </div>
+          <div class="markdown-toolbar-group">
+            <button type="button" class="markdown-tool-btn" data-md-action="fullscreen" title="Fullscreen" aria-label="Fullscreen"><i class="bi bi-arrows-fullscreen"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="find" title="Find &amp; Replace" aria-label="Find &amp; Replace"><i class="bi bi-search"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="help" title="Help" aria-label="Help"><i class="bi bi-question-circle"></i></button>
+            <button type="button" class="markdown-tool-btn" data-md-action="info" title="About Markdown" aria-label="About Markdown"><i class="bi bi-info-circle"></i></button>
+          </div>
+        </div>
+
+        <!-- Reset Confirmation Modal -->
+        <div id="reset-confirm-modal" class="reset-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="reset-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide">
+            <p id="reset-modal-title" class="reset-modal-message">Are you sure you want to delete all files?</p>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="reset-modal-cancel">Cancel</button>
+              <button class="reset-modal-btn reset-modal-confirm" id="reset-modal-confirm">Delete All</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Clear Markdown Formatting Modal -->
+        <div id="clear-formatting-modal" class="reset-modal-overlay modal-overlay" role="dialog" aria-modal="true" aria-labelledby="clear-formatting-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide modal-box">
+            <div class="modal-header">
+              <p id="clear-formatting-title" class="reset-modal-message">Clear active document?</p>
+              <button type="button" class="modal-close-btn" id="clear-formatting-close" aria-label="Close clear document dialog">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+            <p class="modal-subtext">Are you sure you want to clear the content of the active document? The document itself will not be deleted.</p>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="clear-formatting-cancel">Cancel</button>
+              <button class="reset-modal-btn reset-modal-confirm" id="clear-formatting-confirm">Clear Document</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Find & Replace Floating Panel -->
+        <div id="find-replace-modal" class="find-replace-panel" role="region" aria-label="Find and Replace" style="display:none;">
+          <div class="find-replace-header" id="find-replace-drag-handle">
+            <span class="find-replace-title"><i class="bi bi-search me-1"></i> Find &amp; Replace</span>
+            <div class="find-replace-header-actions">
+              <button type="button" class="panel-icon-btn" id="find-replace-reset" title="Reset Position" aria-label="Reset Position"><i class="bi bi-arrow-counterclockwise"></i></button>
+              <button type="button" class="panel-icon-btn" id="find-replace-dock" title="Toggle Dock Mode" aria-label="Toggle Dock Mode"><i class="bi bi-layout-sidebar-reverse"></i></button>
+              <button type="button" class="panel-icon-btn" id="find-replace-close-icon" aria-label="Close find and replace panel"><i class="bi bi-x-lg"></i></button>
+            </div>
+          </div>
+          <div class="find-replace-body">
+            <!-- Find Row -->
+            <div class="find-replace-field-row">
+              <div class="find-input-container">
+                <input type="text" id="find-replace-input" class="find-input-field" placeholder="Find" aria-label="Find query" />
+                <div class="find-options-group">
+                  <button type="button" class="find-option-btn" id="find-case" title="Match Case (Aa)" aria-label="Match Case">Aa</button>
+                  <button type="button" class="find-option-btn" id="find-word" title="Match Whole Word (W)" aria-label="Match Whole Word">W</button>
+                  <button type="button" class="find-option-btn" id="find-regex" title="Use Regular Expression (.*)" aria-label="Use Regular Expression">.*</button>
+                  <button type="button" class="find-option-btn" id="find-sel" title="Find in Selection (Sel)" aria-label="Find in Selection"><i class="bi bi-align-start"></i></button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Real-time Regex Error Box -->
+            <div id="find-replace-error" class="find-error-drawer" style="display:none;">
+              <i class="bi bi-exclamation-triangle-fill me-1"></i> <span id="regex-error-msg"></span>
+            </div>
+
+            <!-- Replace Row -->
+            <div class="find-replace-field-row">
+              <div class="replace-input-container">
+                <input type="text" id="find-replace-with" class="find-input-field" placeholder="Replace" aria-label="Replace with" />
+                <div class="find-options-group">
+                  <button type="button" class="find-option-btn" id="replace-preserve-case" title="Preserve Case (Ab)" aria-label="Preserve Case">Ab</button>
+                  <button type="button" class="find-option-btn active" id="find-wrap" title="Wrap Around (Wrap)" aria-label="Wrap Around" aria-pressed="true">Wrap</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Meta Controls Row -->
+            <div class="find-replace-meta-row">
+              <span id="find-replace-count" class="find-match-count" role="status" aria-live="polite">0 of 0 matches</span>
+              <div class="find-nav-group">
+                <button type="button" class="find-nav-arrow-btn" id="find-prev" title="Previous match (Shift+Enter)" aria-label="Previous match" disabled>
+                  <i class="bi bi-chevron-up"></i>
+                </button>
+                <button type="button" class="find-nav-arrow-btn" id="find-next" title="Next match (Enter)" aria-label="Next match" disabled>
+                  <i class="bi bi-chevron-down"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Advanced Drawer Toggle -->
+            <div class="find-drawer-toggle-row">
+              <button type="button" class="drawer-toggle-btn" id="fr-drawer-toggle" aria-expanded="false">
+                <i class="bi bi-chevron-right me-1"></i> Advanced Options
+              </button>
+            </div>
+
+            <!-- Collapsible Drawer -->
+            <div id="fr-drawer-content" class="find-replace-drawer-content" style="display:none;">
+              <div class="drawer-field">
+                <label for="find-replace-scope" class="drawer-label">Scope Filter</label>
+                <select id="find-replace-scope" class="drawer-select">
+                  <option value="entire">Entire Document</option>
+                  <option value="heading">Headings only</option>
+                  <option value="code">Code blocks only</option>
+                  <option value="latex">LaTeX blocks only</option>
+                  <option value="mermaid">Mermaid blocks only</option>
+                  <option value="plain">Plain text only</option>
+                </select>
+              </div>
+              <div class="drawer-field">
+                <label for="find-replace-history" class="drawer-label">Search History</label>
+                <select id="find-replace-history" class="drawer-select">
+                  <option value="">Recent queries...</option>
+                </select>
+              </div>
+              <div class="drawer-field check-field">
+                <input type="checkbox" id="find-replace-diff-toggle" class="drawer-checkbox" />
+                <label for="find-replace-diff-toggle" class="drawer-label-checkbox">Show Diff Preview before replace</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions Footer -->
+          <div class="find-replace-actions-footer">
+            <button type="button" class="fr-action-btn" id="find-replace-current" disabled>Replace</button>
+            <button type="button" class="fr-action-btn" id="find-replace-all" disabled>Replace All</button>
+            <button type="button" class="fr-action-btn secondary" id="find-replace-reset-footer" title="Reset Position">Reset</button>
+            <button type="button" class="fr-action-btn secondary" id="find-replace-close">Close</button>
+          </div>
+        </div>
+
+        <!-- Diff Preview Modal -->
+        <div id="find-replace-diff-modal" class="reset-modal-overlay modal-overlay" role="dialog" aria-modal="true" aria-labelledby="diff-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--xl modal-box">
+            <div class="modal-header">
+              <p id="diff-modal-title" class="reset-modal-message">Replace All Diff Preview</p>
+              <button type="button" class="modal-close-btn" id="find-replace-diff-close-icon" aria-label="Close diff preview dialog">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+            <div class="modal-body diff-preview-body">
+              <p class="modal-subtext">Review the proposed changes before committing them to the document.</p>
+              <div class="diff-container" id="find-replace-diff-container">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="find-replace-diff-cancel">Cancel</button>
+              <button class="reset-modal-btn reset-modal-confirm" id="find-replace-diff-confirm">Commit Replacements</button>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- Help Modal -->
+        <div id="help-modal" class="reset-modal-overlay modal-overlay" role="dialog" aria-modal="true" aria-labelledby="help-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--xl modal-box">
+            <div class="modal-header">
+              <p id="help-modal-title" class="reset-modal-message">Markdown Viewer Help</p>
+              <button type="button" class="modal-close-btn" id="help-modal-close-icon" aria-label="Close help dialog">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="modal-section">
+                <h3 class="modal-section-title">Application shortcuts</h3>
+                <ul class="modal-list">
+                  <li>Use the view buttons in the toolbar to switch between Editor, Split, and Preview modes.</li>
+                  <li>Sync scrolling is available in Split view to keep the editor and preview aligned.</li>
+                  <li>Import, Export, Copy, Share, and Theme toggle actions are always available in the header toolbar.</li>
+                </ul>
+              </div>
+              <div class="modal-section">
+                <h3 class="modal-section-title">Toolbar descriptions</h3>
+                <ul class="modal-list">
+                  <li>Undo/Redo and Clear Formatting help you manage editing changes quickly.</li>
+                  <li>Text styling tools cover bold, italic, strikethrough, quotes, headings, and list formatting.</li>
+                  <li>Insert helpers add links, images, code blocks, tables, emojis, symbols, and alerts.</li>
+                  <li>Use Fullscreen, Find &amp; Replace, Help, and About Markdown for focused editing.</li>
+                </ul>
+              </div>
+              <div class="modal-section">
+                <h3 class="modal-section-title">Markdown tips</h3>
+                <ul class="modal-list">
+                  <li>Create headings with <code>#</code>, <code>##</code>, and <code>###</code> prefixes.</li>
+                  <li>Emphasize text with <code>**bold**</code>, <code>*italic*</code>, or <code>~~strikethrough~~</code>.</li>
+                  <li>Use <code>-</code> or <code>1.</code> to build lists, and triple backticks for code blocks.</li>
+                </ul>
+              </div>
+              <div class="modal-section">
+                <h3 class="modal-section-title">Keyboard shortcuts</h3>
+                <ul class="modal-list">
+                  <li><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> &mdash; Undo</li>
+                  <li><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> &mdash; Redo</li>
+                  <li><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>F</kbd> &mdash; Open Find &amp; Replace</li>
+                  <li><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>C</kbd>/<kbd>V</kbd> &mdash; Copy/Paste</li>
+                </ul>
+              </div>
+            </div>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="help-modal-close">Close</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- About Markdown Modal -->
+        <div id="about-modal" class="reset-modal-overlay modal-overlay" role="dialog" aria-modal="true" aria-labelledby="about-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--xl modal-box">
+            <div class="modal-header">
+              <p id="about-modal-title" class="reset-modal-message">About Markdown</p>
+              <button type="button" class="modal-close-btn" id="about-modal-close-icon" aria-label="Close about dialog">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="about-header">
+                <img src="assets/icon.jpg" alt="Markdown Viewer logo" class="about-logo" width="64" height="64" />
+                <div class="about-details">
+                  <h3 class="about-title">Markdown Viewer</h3>
+                  <p class="about-description">A GitHub-style Markdown editor with live preview, diagrams, math, syntax highlighting, and export tools.</p>
+                  <p class="about-meta">Version <span id="about-version"></span> &bull; Apache License 2.0 &bull; Open source</p>
+                </div>
+              </div>
+              <div class="modal-section">
+                <h3 class="modal-section-title">Open-source links</h3>
+                <ul class="modal-list">
+                  <li><a href="https://github.com/ThisIs-Developer/Markdown-Viewer/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Apache License 2.0</a></li>
+                  <li><a href="https://github.com/ThisIs-Developer/Markdown-Viewer" target="_blank" rel="noopener noreferrer">GitHub Repository</a></li>
+                  <li><a href="https://github.com/ThisIs-Developer/Markdown-Viewer/wiki/Contributing" target="_blank" rel="noopener noreferrer">Contribution Guide</a></li>
+                  <li><a href="https://github.com/ThisIs-Developer/Markdown-Viewer/issues/new/choose" target="_blank" rel="noopener noreferrer">Report an Issue</a></li>
+                  <li><a href="https://github.com/ThisIs-Developer/Markdown-Viewer/discussions" target="_blank" rel="noopener noreferrer">Community &amp; Support</a></li>
+                </ul>
+                <p class="modal-subtext">For feature requests, open a GitHub issue or start a discussion so the community can weigh in.</p>
+              </div>
+              <div class="modal-section">
+                <h3 class="modal-section-title">Markdown resources</h3>
+                <ul class="modal-list">
+                  <li><a href="https://github.com/ThisIs-Developer/Markdown-Viewer/wiki/Markdown-Reference" target="_blank" rel="noopener noreferrer">Markdown syntax reference</a></li>
+                </ul>
+              </div>
+              <div class="modal-section">
+                <h3 class="modal-section-title">Technology stack</h3>
+                <ul class="modal-list">
+                  <li>HTML, CSS, and JavaScript with Bootstrap 5 for layout and styling.</li>
+                  <li>Marked, DOMPurify, Highlight.js, Mermaid, MathJax, and Emoji Toolkit for rendering.</li>
+                </ul>
+              </div>
+              <div class="modal-section">
+                <h3 class="modal-section-title">Open-source credits</h3>
+                <p class="modal-subtext">Markdown Viewer is built on top of open-source libraries maintained by the community. Thank you to every contributor and maintainer.</p>
+              </div>
+            </div>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="about-modal-close">Close</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Share Modal -->
+        <div id="share-modal" class="reset-modal-overlay modal-overlay" role="dialog" aria-modal="true" aria-labelledby="share-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide modal-box">
+            <div class="modal-header">
+              <p id="share-modal-title" class="reset-modal-message">Share Document</p>
+              <button type="button" class="modal-close-btn" id="share-modal-close-icon" aria-label="Close share dialog">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+            <div class="modal-body">
+              <p class="share-modal-description">Choose how recipients can interact with this document.</p>
+              <div class="share-mode-cards">
+                <label class="share-mode-card" id="share-card-view" for="share-mode-view">
+                  <input type="radio" id="share-mode-view" name="share-mode" value="view" checked />
+                  <span class="share-card-icon"><i class="bi bi-eye"></i></span>
+                  <span class="share-card-body">
+                    <span class="share-card-title">View only</span>
+                    <span class="share-card-desc">Opens in preview mode. The editor is hidden.</span>
+                  </span>
+                  <span class="share-card-check"><i class="bi bi-check-lg"></i></span>
+                </label>
+                <label class="share-mode-card" id="share-card-edit" for="share-mode-edit">
+                  <input type="radio" id="share-mode-edit" name="share-mode" value="edit" />
+                  <span class="share-card-icon"><i class="bi bi-pencil-square"></i></span>
+                  <span class="share-card-body">
+                    <span class="share-card-title">Edit</span>
+                    <span class="share-card-desc">Opens in split editor + preview mode.</span>
+                  </span>
+                  <span class="share-card-check"><i class="bi bi-check-lg"></i></span>
+                </label>
+              </div>
+              <div class="share-url-row">
+                <input type="text" id="share-url-input" class="rename-modal-input share-url-input" readonly placeholder="Generating link…" aria-label="Share URL" />
+                <button class="reset-modal-btn share-copy-btn" id="share-copy-btn" title="Copy link">
+                  <i class="bi bi-clipboard"></i>
+                </button>
+              </div>
+              <p class="share-modal-notice"><i class="bi bi-info-circle"></i> The entire document is encoded in the URL. No data is sent to any server.</p>
+            </div>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="share-modal-close">Close</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rename Modal -->
+        <div id="rename-modal" class="reset-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="rename-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide">
+            <p id="rename-modal-title" class="reset-modal-message">Rename file</p>
+            <input type="text" id="rename-modal-input" class="rename-modal-input" placeholder="File name" />
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="rename-modal-cancel">Cancel</button>
+              <button class="reset-modal-btn reset-modal-confirm" id="rename-modal-confirm">Rename</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Link Modal -->
+        <div id="link-modal" class="reset-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="link-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide">
+            <p id="link-modal-title" class="reset-modal-message">Insert link</p>
+            <div class="reset-modal-field">
+              <label class="reset-modal-label" for="link-modal-url">Address / URL</label>
+              <input type="url" id="link-modal-url" class="rename-modal-input" value="https://" />
+            </div>
+            <div class="reset-modal-field">
+              <label class="reset-modal-label" for="link-modal-text">Link Text</label>
+              <input type="text" id="link-modal-text" class="rename-modal-input" placeholder="Link title" />
+            </div>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="link-modal-cancel">Cancel</button>
+              <button class="reset-modal-btn" id="link-modal-apply">Apply</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reference Modal -->
+        <div id="reference-modal" class="reset-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="reference-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide">
+            <p id="reference-modal-title" class="reset-modal-message">Insert reference</p>
+            <div class="reset-modal-field">
+              <label class="reset-modal-label" for="reference-modal-number">Reference Number</label>
+              <input type="text" id="reference-modal-number" class="rename-modal-input" value="[1]" />
+            </div>
+            <div class="reset-modal-field">
+              <label class="reset-modal-label" for="reference-modal-url">Address / Link</label>
+              <input type="url" id="reference-modal-url" class="rename-modal-input" value="https://" />
+            </div>
+            <div class="reset-modal-field">
+              <label class="reset-modal-label" for="reference-modal-title-input">Title</label>
+              <input type="text" id="reference-modal-title-input" class="rename-modal-input" placeholder="Reference title" />
+            </div>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="reference-modal-cancel">Cancel</button>
+              <button class="reset-modal-btn" id="reference-modal-apply">Insert</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Image Modal -->
+        <div id="image-modal" class="reset-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="image-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide">
+            <p id="image-modal-title" class="reset-modal-message">Insert image</p>
+            <div class="reset-modal-toggle-group">
+              <label class="reset-modal-option">
+                <input type="radio" name="image-source" id="image-source-upload" value="upload">
+                Upload from Device
+              </label>
+              <label class="reset-modal-option">
+                <input type="radio" name="image-source" id="image-source-url" value="url" checked>
+                External Image (URL)
+              </label>
+            </div>
+            <div id="image-upload-fields" class="reset-modal-field-group" style="display:none;">
+              <input type="file" id="image-modal-file" class="rename-modal-input" accept="image/*" />
+            </div>
+            <div id="image-url-fields" class="reset-modal-field-group">
+              <div class="reset-modal-field">
+                <label class="reset-modal-label" for="image-modal-url">Image URL</label>
+                <input type="url" id="image-modal-url" class="rename-modal-input" value="https://" />
+              </div>
+            </div>
+            <div class="reset-modal-field">
+              <label class="reset-modal-label" for="image-modal-alt">Alt Text (used for title)</label>
+              <input type="text" id="image-modal-alt" class="rename-modal-input" placeholder="Image description" />
+            </div>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="image-modal-cancel">Cancel</button>
+              <button class="reset-modal-btn" id="image-modal-insert">Insert</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table Modal -->
+        <div id="table-modal" class="reset-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="table-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide">
+            <p id="table-modal-title" class="reset-modal-message">Insert table</p>
+            <div class="reset-modal-field">
+              <label class="reset-modal-label" for="table-modal-columns">Column count</label>
+              <input type="number" id="table-modal-columns" class="rename-modal-input" min="1" max="20" value="3" />
+            </div>
+            <div class="reset-modal-field">
+              <label class="reset-modal-label" for="table-modal-rows">Row count</label>
+              <input type="number" id="table-modal-rows" class="rename-modal-input" min="1" max="20" value="1" />
+            </div>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="table-modal-cancel">Cancel</button>
+              <button class="reset-modal-btn" id="table-modal-insert">Insert</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Emoji Modal -->
+        <div id="emoji-modal" class="reset-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="emoji-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide reset-modal-box--xl">
+            <p id="emoji-modal-title" class="reset-modal-message">GitHub Emojis</p>
+            <div class="reset-modal-field">
+              <label class="reset-modal-label" for="emoji-modal-search">Search</label>
+              <input type="text" id="emoji-modal-search" class="rename-modal-input" placeholder="Search emojis" />
+            </div>
+            <div id="emoji-modal-grid" class="emoji-grid" role="listbox" aria-label="Emoji list"></div>
+            <p id="emoji-modal-empty" class="modal-empty" style="display:none;">No emojis found.</p>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="emoji-modal-cancel">Cancel</button>
+              <button class="reset-modal-btn" id="emoji-modal-insert">Insert</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Symbols Modal -->
+        <div id="symbols-modal" class="reset-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="symbols-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide reset-modal-box--xl">
+            <p id="symbols-modal-title" class="reset-modal-message">Symbols &amp; HTML Entities</p>
+            <div class="reset-modal-field">
+              <label class="reset-modal-label" for="symbols-modal-search">Search</label>
+              <input type="text" id="symbols-modal-search" class="rename-modal-input" placeholder="Search symbols" />
+            </div>
+            <div id="symbols-modal-grid" class="symbol-grid" role="listbox" aria-label="Symbol list"></div>
+            <p id="symbols-modal-empty" class="modal-empty" style="display:none;">No symbols found.</p>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="symbols-modal-cancel">Cancel</button>
+              <button class="reset-modal-btn" id="symbols-modal-insert">Insert</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Markdown Alert Modal -->
+        <div id="alert-modal" class="reset-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="alert-modal-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box reset-modal-box--wide">
+            <p id="alert-modal-title" class="reset-modal-message">Markdown alerts</p>
+            <div id="alert-modal-grid" class="alert-grid" role="listbox" aria-label="Markdown alert types"></div>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="alert-modal-cancel">Cancel</button>
+              <button class="reset-modal-btn" id="alert-modal-insert">Insert</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- GitHub Import Modal -->
+        <div id="github-import-modal" class="reset-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="github-import-title" aria-hidden="true" style="display:none;">
+          <div class="reset-modal-box">
+            <p id="github-import-title" class="reset-modal-message">Import Markdown from GitHub</p>
+            <input type="url" id="github-import-url" class="rename-modal-input" placeholder="https://github.com/owner/repo/blob/main/README.md" />
+            <select id="github-import-file-select" class="rename-modal-input" style="display:none;"></select>
+            <div id="github-import-selection-toolbar" class="github-import-selection-toolbar" style="display:none;">
+              <span id="github-import-selected-count" class="github-import-selected-count">0 selected</span>
+              <button type="button" class="reset-modal-btn" id="github-import-select-all">Select All</button>
+            </div>
+            <div id="github-import-tree" class="github-import-tree" style="display:none;"></div>
+            <p id="github-import-error" class="github-import-error" style="display:none;"></p>
+            <div class="reset-modal-actions">
+              <button class="reset-modal-btn reset-modal-cancel" id="github-import-cancel">Cancel</button>
+              <button class="reset-modal-btn" id="github-import-submit">Import</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Full-screen drag overlay (shown when a file is dragged over the window) -->
+        <div id="drag-overlay" class="drag-overlay" aria-hidden="true">
+            <div class="drag-overlay-inner">
+                <i class="bi bi-cloud-arrow-up drag-overlay-icon"></i>
+                <p class="drag-overlay-text">Drop your Markdown file anywhere</p>
+                <p class="drag-overlay-sub">.md or .markdown files supported</p>
+            </div>
+        </div>
+
+        <main class="content-container">
+            <div class="editor-pane is-loading">
+                <div id="line-numbers" class="line-numbers" aria-hidden="true" inert></div>
+                <div id="editor-highlight-layer" class="editor-highlight-layer" aria-hidden="true" tabindex="-1" inert></div>
+                <div class="editor-skeleton" id="editor-skeleton" aria-hidden="true">
+                    <div class="skeleton-placeholder skeleton-title"></div>
+                    <div class="skeleton-placeholder skeleton-line skeleton-w90"></div>
+                    <div class="skeleton-placeholder skeleton-line skeleton-w85"></div>
+                    <div class="skeleton-placeholder skeleton-line skeleton-w60"></div>
+                    
+                    <div class="skeleton-placeholder skeleton-subtitle"></div>
+                    <div class="skeleton-placeholder skeleton-line skeleton-w88"></div>
+                    <div class="skeleton-placeholder skeleton-line skeleton-w92"></div>
+                    <div class="skeleton-placeholder skeleton-line skeleton-w45"></div>
+                </div>
+                <textarea id="markdown-editor" placeholder="Type or paste your Markdown here..."></textarea>
+                <div class="drop-hint" aria-hidden="true">
+                    <i class="bi bi-cloud-arrow-up me-1"></i>Drop a .md file anywhere to open it
+                </div>
+            </div>
+            <!-- Resize Divider - Story 1.3 -->
+            <div class="resize-divider" role="separator" aria-orientation="vertical" aria-label="Resize panes" tabindex="0">
+                <div class="resize-divider-handle"></div>
+            </div>
+            <div class="preview-pane">
+                <div id="markdown-preview" class="markdown-body">
+                    <!-- Initial dynamic article skeleton loader -->
+                    <div class="skeleton-preview-container" id="markdown-preview-skeleton" aria-hidden="true">
+                        <div class="skeleton-placeholder skeleton-title"></div>
+                        <div class="skeleton-placeholder skeleton-line skeleton-w90"></div>
+                        <div class="skeleton-placeholder skeleton-line skeleton-w85"></div>
+                        <div class="skeleton-placeholder skeleton-line skeleton-w60"></div>
+                        
+                        <div class="skeleton-placeholder skeleton-subtitle"></div>
+                        <div class="skeleton-placeholder skeleton-line skeleton-w88"></div>
+                        <div class="skeleton-placeholder skeleton-line skeleton-w92"></div>
+                        <div class="skeleton-placeholder skeleton-line skeleton-w45"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Mermaid Zoom Modal -->
+    <div id="mermaid-zoom-modal" role="dialog" aria-modal="true" aria-label="Diagram zoom view" aria-hidden="true">
+        <div class="mermaid-modal-content">
+            <div class="mermaid-modal-header">
+                <span>Diagram</span>
+                <button class="mermaid-modal-close" id="mermaid-modal-close" title="Close" aria-label="Close diagram modal">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="mermaid-modal-diagram" id="mermaid-modal-diagram"></div>
+            <div class="mermaid-modal-controls">
+                <button class="mermaid-toolbar-btn" id="mermaid-modal-zoom-in" title="Zoom in">
+                    <i class="bi bi-zoom-in"></i> Zoom In
+                </button>
+                <button class="mermaid-toolbar-btn" id="mermaid-modal-zoom-out" title="Zoom out">
+                    <i class="bi bi-zoom-out"></i> Zoom Out
+                </button>
+                <button class="mermaid-toolbar-btn" id="mermaid-modal-zoom-reset" title="Reset zoom">
+                    <i class="bi bi-arrows-angle-contract"></i> Reset
+                </button>
+                <button class="mermaid-toolbar-btn" id="mermaid-modal-copy" title="Copy image">
+                    <i class="bi bi-clipboard-image"></i> Copy
+                </button>
+                <button class="mermaid-toolbar-btn" id="mermaid-modal-download-png" title="Download PNG">
+                    <i class="bi bi-file-image"></i> PNG
+                </button>
+                <button class="mermaid-toolbar-btn" id="mermaid-modal-download-svg" title="Download SVG">
+                    <i class="bi bi-filetype-svg"></i> SVG
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/markdown" id="default-markdown">---
+title: Welcome to Markdown Viewer
+description: A GitHub-style Markdown renderer with live preview, math, diagrams, and export support.
+author: ThisIs-Developer
+tags: ["markdown", "preview", "mermaid", "latex", "open-source"]
+---
+
+# Welcome to Markdown Viewer
+
+## ✨ Key Features
+- **Live Preview** with GitHub styling
+- **Smart Import/Export** (MD, HTML, PDF)
+- **Mermaid Diagrams** for visual documentation
+- **LaTeX Math Support** for scientific notation
+- **Emoji Support** 😄 👍 🎉
+
+## 💻 Code with Syntax Highlighting
+```javascript
+  function renderMarkdown() {
+    const markdown = markdownEditor.value;
+    const html = marked.parse(markdown);
+    const sanitizedHtml = DOMPurify.sanitize(html);
+    markdownPreview.innerHTML = sanitizedHtml;
+    
+    // Syntax highlighting is handled automatically
+    // during the parsing phase by the marked renderer.
+    // Themes are applied instantly via CSS variables.
+  }
+```
+
+## 🧮 Mathematical Expressions
+Write complex formulas with LaTeX syntax:
+
+Inline equation: $$E = mc^2$$
+
+Display equations:
+$$\frac{\partial f}{\partial x} = \lim_{h \to 0} \frac{f(x+h) - f(x)}{h}$$
+
+$$\sum_{i=1}^{n} i^2 = \frac{n(n+1)(2n+1)}{6}$$
+
+## 📊 Mermaid Diagrams
+Create powerful visualizations directly in markdown:
+
+```mermaid
+flowchart LR
+    A[Start] --> B{Is it working?}
+    B -->|Yes| C[Great!]
+    B -->|No| D[Debug]
+    C --> E[Deploy]
+    D --> B
+```
+
+### Sequence Diagram Example
+```mermaid
+sequenceDiagram
+    User->>Editor: Type markdown
+    Editor->>Preview: Render content
+    User->>Editor: Make changes
+    Editor->>Preview: Update rendering
+    User->>Export: Save as PDF
+```
+
+## 📋 Task Management
+- [x] Create responsive layout
+- [x] Implement live preview with GitHub styling
+- [x] Add syntax highlighting for code blocks
+- [x] Support math expressions with LaTeX
+- [x] Enable mermaid diagrams
+
+## 🆚 Feature Comparison
+
+| Feature                  | Markdown Viewer (Ours) | Other Markdown Editors  |
+|:-------------------------|:----------------------:|:-----------------------:|
+| Live Preview             | ✅ GitHub-Styled       | ✅                     |
+| Sync Scrolling           | ✅ Two-way             | 🔄 Partial/None        |
+| Mermaid Support          | ✅                     | ❌/Limited             |
+| LaTeX Math Rendering     | ✅                     | ❌/Limited             |
+
+### 📝 Multi-row Headers Support
+
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2">Document Type</th>
+      <th colspan="2">Support</th>
+    </tr>
+    <tr>
+      <th>Markdown Viewer (Ours)</th>
+      <th>Other Markdown Editors</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Technical Docs</td>
+      <td>Full + Diagrams</td>
+      <td>Limited/Basic</td>
+    </tr>
+    <tr>
+      <td>Research Notes</td>
+      <td>Full + Math</td>
+      <td>Partial</td>
+    </tr>
+    <tr>
+      <td>Developer Guides</td>
+      <td>Full + Export Options</td>
+      <td>Basic</td>
+    </tr>
+  </tbody>
+</table>
+
+## 📝 Text Formatting Examples
+
+### Text Formatting
+
+Text can be formatted in various ways for ~~strikethrough~~, **bold**, *italic*, or ***bold italic***.
+
+For highlighting important information, use <mark>highlighted text</mark> or add <u>underlines</u> where appropriate.
+
+### Superscript and Subscript
+
+Chemical formulas: H<sub>2</sub>O, CO<sub>2</sub>  
+Mathematical notation: x<sup>2</sup>, e<sup>iπ</sup>
+
+### Keyboard Keys
+
+Press <kbd>Ctrl</kbd> + <kbd>B</kbd> for bold text.
+
+### Abbreviations
+
+<abbr title="Graphical User Interface">GUI</abbr>  
+<abbr title="Application Programming Interface">API</abbr>
+
+### Text Alignment
+
+<div style="text-align: center">
+Centered text for headings or important notices
+</div>
+
+<div style="text-align: right">
+Right-aligned text (for dates, signatures, etc.)
+</div>
+
+### **Lists**
+
+Create bullet points:
+* Item 1
+* Item 2
+  * Nested item
+    * Nested further
+
+### **Links and Images**
+
+Add a [link](https://github.com/ThisIs-Developer/Markdown-Viewer) to important resources.
+
+Embed an image:
+<img alt="Markdown Logo" src="https://markdownviewer.pages.dev/assets/icon.jpg" width="120" height="120">
+
+### **Blockquotes**
+
+Quote someone famous:
+> "The best way to predict the future is to invent it." - Alan Kay
+
+---
+
+## 🛡️ Security Note
+
+This is a fully client-side application. Your content never leaves your browser and stays secure on your device.
+</script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+    <script src="script.js"></script>
+    <!-- Screen reader dynamic accessibility announcer -->
+    <div id="app-accessibility-announcer" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+    <div id="plan-toast-container" style="display:none">
+      <div id="plan-toast" class="plan-toast"></div>
+    </div>
+</body>
+</html>
