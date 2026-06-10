@@ -925,7 +925,7 @@ async function waitForApproval(
           `Review the codebase and write a detailed implementation plan based on this suggestion: "${suggestion}".`,
           `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
           `The plan should cover: files to change, approach, and any risk areas.`,
-          `After saving the plan file, report the exact path where it was saved by writing a single line at the end of your response in this exact format: PLAN_PATH:/path/to/your/plan.md`,
+    `Write the plan to \`$HOME/.local/share/opencode/plans/\` (create the directory if it doesn't exist). After saving, report the exact path by writing a single line at the end of your response in this exact format: PLAN_PATH:/path/to/your/plan.md`,
           current.context ? `\n\nDiscord report context:\n${current.context}` : "",
           `\n\nYou can post messages to the Discord thread by running \`${helperPath} info "your message"\`. You can also rename the thread with \`${helperPath} --rename "new name"\`.`,
         ].filter(Boolean).join(" ");
