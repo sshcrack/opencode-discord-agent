@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Events } from "discord.js";
+import { Client, GatewayIntentBits, Events, TextChannel } from "discord.js";
 import { prisma } from "./db";
 import { handleCommand } from "./discord/commands";
 import { handleAutocomplete, handleButton } from "./discord/interactions";
@@ -35,6 +35,22 @@ const client = new Client({
 client.once(Events.ClientReady, async (c) => {
   console.log(`Logged in as ${c.user.tag}`);
   createTRPCServer(parseInt(TRPC_PORT));
+
+  // Post "Done." to the channel that triggered /update
+  const updateChannel = await prisma.setting.findUnique({
+    where: { key: "last_update_channel_id" },
+  });
+  if (updateChannel?.value) {
+    try {
+      const ch = await client.channels.fetch(updateChannel.value);
+      if (ch?.isTextBased()) {
+        await (ch as TextChannel).send("Done.");
+      }
+    } catch {
+      // channel might be gone
+    }
+    await prisma.setting.delete({ where: { key: "last_update_channel_id" } }).catch(() => {});
+  }
 
   const updatePresence = async () => {
     try {

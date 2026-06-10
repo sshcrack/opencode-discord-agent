@@ -36,8 +36,15 @@ export class UpdateCommand extends Command {
       ? ""
       : `\n❌ Migration failed: ${migrate.stderr.toString().slice(0, 500)}`;
 
+    // Save the channel so the bot can post "Done." after restart
+    await prisma.setting.upsert({
+      where: { key: "last_update_channel_id" },
+      update: { value: interaction.channelId },
+      create: { key: "last_update_channel_id", value: interaction.channelId },
+    });
+
     await interaction.editReply(
-      `✅ Updated.\n\`\`\`\n${output.slice(0, 1500)}\n\`\`\`${migrateOutput}\nRestarting...`,
+      `✅ Updated.\`\`\`\n${output.slice(0, 1500)}\n\`\`\`${migrateOutput}\nRestarting...`,
     );
 
     process.exit(0);
