@@ -20,6 +20,7 @@ import {
   PollAnswerInput,
   PollAnswerOutput,
   GetBotHeadOutput,
+  PollNextJobOutput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
 import { postToThread, renameThread, getClient } from "../discord/helpers";
@@ -57,7 +58,7 @@ const t = initTRPC.create();
 export const appRouter = t.router({
   pollNextJob: t.procedure
     .input(PollNextJobInput)
-    .output(JobSchema.nullable())
+    .output(PollNextJobOutput)
     .query(async ({ input }) => {
       const now = new Date();
       await prisma.setting.upsert({
@@ -69,11 +70,7 @@ export const appRouter = t.router({
       // Verify worker is on the same git HEAD as the bot
       const botHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
       if (botHead && botHead !== "unknown" && input.gitHead !== botHead) {
-        await postToThread(
-          (await prisma.job.findFirst({ where: { status: "pending" }, orderBy: { createdAt: "asc" } }))?.threadId ?? "",
-          `⏳ Worker **${input.workerId}** is outdated (HEAD: ${input.gitHead.slice(0, 12)} ≠ bot: ${botHead.slice(0, 12)}). Waiting for it to update...`,
-        ).catch(() => {});
-        return null;
+        return { job: null, gitMismatch: true };
       }
 
       // Atomically claim a pending job — the where clause prevents two workers
@@ -97,14 +94,14 @@ export const appRouter = t.router({
         });
       });
 
-      if (!claimed) return null;
+      if (!claimed) return { job: null, gitMismatch: false };
 
       await postToThread(
         claimed.threadId,
         `ℹ️ Worker **${input.workerId}** picked up the job`,
       );
 
-      return toJobOutput(claimed);
+      return { job: toJobOutput(claimed), gitMismatch: false };
     }),
 
   getJobStatus: t.procedure

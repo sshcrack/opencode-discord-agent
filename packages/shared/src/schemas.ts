@@ -63,6 +63,11 @@ export const PollNextJobInput = z.object({
   gitHead: z.string(),
 });
 
+export const PollNextJobOutput = z.object({
+  job: JobSchema.nullable(),
+  gitMismatch: z.boolean(),
+});
+
 export const GetJobStatusInput = z.object({
   jobId: z.number(),
   workerId: z.string(),

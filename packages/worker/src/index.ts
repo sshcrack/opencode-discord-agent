@@ -1,6 +1,6 @@
 import { BOT_URL, WORKER_ID, dryRun } from "./env";
 import { workerLog } from "./logging";
-import { poll, heartbeat, checkForUpdates } from "./polling";
+import { poll, heartbeat } from "./polling";
 
 async function main() {
   console.log(`╔══════════════════════════════════════════════╗`);
@@ -14,11 +14,6 @@ async function main() {
   setInterval(() => {
     heartbeat().catch(err => workerLog("Heartbeat error:", err));
   }, 30_000);
-
-  // Check for git updates every 60 seconds (bot ↔ worker HEAD exchange)
-  setInterval(() => {
-    checkForUpdates().catch(err => workerLog("Update check error:", err));
-  }, 60_000);
 
   let pollInterval = 5_000;
   const scheduleNextPoll = () => {

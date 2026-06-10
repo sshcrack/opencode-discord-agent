@@ -20,6 +20,7 @@ import {
   PollAnswerInput,
   PollAnswerOutput,
   GetBotHeadOutput,
+  PollNextJobOutput,
 } from "./schemas";
 
 const t = initTRPC.create();
@@ -27,7 +28,7 @@ const t = initTRPC.create();
 export const appRouter = t.router({
   pollNextJob: t.procedure
     .input(PollNextJobInput)
-    .output(JobSchema.nullable())
+    .output(PollNextJobOutput)
     .query(async () => {
       throw new Error("Not implemented in shared package");
     }),
