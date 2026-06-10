@@ -1,8 +1,19 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 
+let trpcServer: ReturnType<typeof Bun.serve> | null = null;
+
+export function getTRPCServer() {
+  return trpcServer;
+}
+
+export function stopTRPCServer() {
+  trpcServer?.stop();
+  trpcServer = null;
+}
+
 export function createTRPCServer(port: number) {
-  Bun.serve({
+  trpcServer = Bun.serve({
     port,
     fetch(req) {
       const url = new URL(req.url);

@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, CommandInteraction } from "discord.js";
 import { Command } from "./Command";
 import { prisma } from "../../db";
+import { stopTRPCServer } from "../../trpc/server";
 
 export class UpdateCommand extends Command {
   data = new SlashCommandBuilder()
@@ -25,6 +26,7 @@ export class UpdateCommand extends Command {
 
     const output = pull.stdout.toString().trim();
 
+    stopTRPCServer();
     await prisma.$disconnect();
 
     const botDir = `${gitRoot}/packages/bot`;
