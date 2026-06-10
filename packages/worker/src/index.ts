@@ -54,15 +54,17 @@ async function getIssueModel(): Promise<string> {
 let activeJobId: number | null = null;
 
 async function poll(): Promise<void> {
+  if (activeJobId !== null) {
+    workerLog(`Skipping poll — job #${activeJobId} still active`);
+    return;
+  }
   const start = performance.now();
   const result = await client.pollNextJob.query({ workerId: WORKER_ID });
   if (result) {
     const elapsed = (performance.now() - start).toFixed(0);
     workerLog(`Claimed job #${result.id} for repo ${result.repoSlug} (poll took ${elapsed}ms)`);
     activeJobId = result.id;
-    handleJob(result).catch(err =>
-      jobLog(result.id, `Unhandled job error:`, err),
-    );
+    await handleJob(result);
   }
 }
 
@@ -296,16 +298,18 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
       { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
     );
 
-    const output = await new Response(proc.stdout).text();
+    const [output, stderrContent] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
     const exitCode = await proc.exited;
     jobLog(job.id, `opencode issue gen finished: exit ${exitCode}, output ${output.length} chars (${(performance.now() - runStart).toFixed(0)}ms)`);
 
     if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
-      jobLog(job.id, `Issue generation stderr: ${stderr.slice(0, 300)}`);
+      jobLog(job.id, `Issue generation stderr: ${stderrContent.slice(0, 300)}`);
       await client.postStatus.mutate({
         jobId: job.id,
-        message: `Issue generation failed (exit ${exitCode}): ${stderr.slice(0, 300)}`,
+        message: `Issue generation failed (exit ${exitCode}): ${stderrContent.slice(0, 300)}`,
         level: "error",
       });
       return null;
@@ -619,16 +623,18 @@ async function runBuildAgent(
     { cwd: worktreePath, stdout: "pipe", stderr: "pipe" },
   );
 
-  const prOutput = await new Response(prProc.stdout).text();
+  const [prOutput, prErrContent] = await Promise.all([
+    new Response(prProc.stdout).text(),
+    new Response(prProc.stderr).text(),
+  ]);
   const prExit = await prProc.exited;
   jobLog(jobId, `gh pr create: exit ${prExit}, output: ${prOutput.trim()} (${(performance.now() - prStart).toFixed(0)}ms)`);
 
   if (prExit !== 0) {
-    const prErr = await new Response(prProc.stderr).text();
-    jobLog(jobId, `PR creation stderr: ${prErr.slice(0, 400)}`);
+    jobLog(jobId, `PR creation stderr: ${prErrContent.slice(0, 400)}`);
     await client.postStatus.mutate({
       jobId,
-      message: `PR creation failed: ${prErr.slice(0, 400)}`,
+      message: `PR creation failed: ${prErrContent.slice(0, 400)}`,
       level: "error",
     });
     return null;

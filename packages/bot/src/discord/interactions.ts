@@ -40,24 +40,33 @@ export async function handleButton(interaction: ButtonInteraction) {
   }
 
   if (action === "approve") {
-    await prisma.job.update({
-      where: { id: jobId },
+    const result = await prisma.job.updateMany({
+      where: { id: jobId, status: "plan_ready" },
       data: { status: "approved" },
     });
+    if (result.count === 0) {
+      await interaction.update({
+        content: ":x: Job is no longer in a state that can be approved (may have been cancelled or auto-approved)",
+        components: [],
+        embeds: [],
+      });
+      return;
+    }
     await interaction.update({
       content: "✅ Plan approved! Proceeding to build...",
       components: [],
       embeds: [],
     });
   } else if (action === "cancel") {
-    const job = await prisma.job.findUnique({ where: { id: jobId } });
-    if (job && (job.status === "plan_ready" || job.status === "planning")) {
-      await prisma.job.update({
-        where: { id: jobId },
-        data: { status: "cancelled" },
-      });
-    }
-    await interaction.update({ content: "❌ Job cancelled", components: [], embeds: [] });
+    const result = await prisma.job.updateMany({
+      where: { id: jobId, status: { in: ["plan_ready", "planning"] } },
+      data: { status: "cancelled" },
+    });
+    await interaction.update({
+      content: result.count > 0 ? "❌ Job cancelled" : ":x: Job is no longer in a cancellable state",
+      components: [],
+      embeds: [],
+    });
   } else if (action === "suggest") {
     await interaction.update({
       content: "✏️ Please reply in this thread with your suggestion for the plan revision.",

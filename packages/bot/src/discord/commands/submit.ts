@@ -40,7 +40,7 @@ export class SubmitCommand extends Command {
     while (true) {
       const fetched: Collection<string, Message> = await thread.messages.fetch({ limit: 100, ...(lastId ? { before: lastId } : {}) });
       if (fetched.size === 0) break;
-      messages.push(...fetched.values());
+      messages.unshift(...fetched.reverse().values());
       const last = fetched.last();
       if (!last) break;
       lastId = last.id;

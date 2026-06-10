@@ -46,11 +46,13 @@ export async function runFallback(
         stderr: "pipe",
       });
 
-      const stdout = await new Response(proc.stdout).text();
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
       const exitCode = await proc.exited;
 
       if (exitCode !== 0) {
-        const stderr = await new Response(proc.stderr).text();
         await postToThread(threadId, `❌ Fallback opencode failed (exit ${exitCode}): ${stderr.slice(0, 500)}`);
         await prisma.job.update({ where: { id: jobId }, data: { status: "failed" } });
         return;
@@ -83,11 +85,13 @@ export async function runFallback(
         stderr: "pipe",
       });
 
-      const ghOutput = await new Response(ghProc.stdout).text();
+      const [ghOutput, ghErr] = await Promise.all([
+        new Response(ghProc.stdout).text(),
+        new Response(ghProc.stderr).text(),
+      ]);
       const ghExit = await ghProc.exited;
 
       if (ghExit !== 0) {
-        const ghErr = await new Response(ghProc.stderr).text();
         await postToThread(threadId, `❌ Failed to create GitHub issue: ${ghErr.slice(0, 500)}`);
         await prisma.job.update({ where: { id: jobId }, data: { status: "failed" } });
         return;
