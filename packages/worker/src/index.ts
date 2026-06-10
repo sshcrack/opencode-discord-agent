@@ -196,6 +196,16 @@ async function handleJob(job: Job) {
     const finalSessionId = await waitForApproval(job.id, sessionId, worktreePath, job);
     if (finalSessionId === null) {
       jobLog(job.id, "Job was cancelled by user");
+      // Close the GitHub issue since the plan was rejected
+      if (issueNumber && !dryRun) {
+        const repoName = await getRepoNameWithOwner(repoPath).catch(() => "");
+        if (repoName) {
+          const closeArgs = ["issue", "close", String(issueNumber), "--repo", repoName];
+          jobLog(job.id, `Closing issue #${issueNumber}: gh ${closeArgs.join(" ")}`);
+          const closeProc = Bun.spawn(["gh", ...closeArgs], { cwd: repoPath, stdout: "pipe", stderr: "pipe" });
+          await closeProc.exited;
+        }
+      }
       await client.postStatus.mutate({
         jobId: job.id,
         message: "Job cancelled",
@@ -320,9 +330,12 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
       `Create a well-structured GitHub issue for the following ${job.kind} report.`,
       `Repository: ${job.repoSlug}`,
       ``,
-      `# Output ONLY:`,
-      `Line 1: Issue title (plain text, no markdown heading prefix)`,
-      `Line 2+: Issue body in Markdown`,
+      `# CRITICAL — Output format:`,
+      `Your ENTIRE response must be ONLY the issue. No greetings, no explanations, no preamble.`,
+      `Line 1 MUST be the issue title directly — NOT "Here is the issue:" or any other prefix.`,
+      `Line 2+ is the issue body in Markdown.`,
+      `Do NOT wrap in code fences. Do NOT add any text before or after.`,
+      `First line = title. Rest = body.`,
       ``,
       `## Report context:`,
       `Kind: ${job.kind}`,
@@ -407,7 +420,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
 
     const lines = issueText.trim().split("\n");
     const title =
-      lines[0]?.replace(/^#+\s*/, "").trim() || `[${job.repoSlug}] ${job.kind} report`;
+      lines[0]?.trim().replace(/^#+\s*/, "").trim() || `[${job.repoSlug}] ${job.kind} report`;
     const body =
       lines.slice(1).join("\n").trim() ||
       `Automated ${job.kind} report for ${job.repoSlug}`;
