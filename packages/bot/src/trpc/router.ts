@@ -15,7 +15,7 @@ import {
   GetSettingOutput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread } from "../discord/helpers";
+import { postToThread, upsertStatusMessage } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
 import type { Job } from "../db/generated/client";
 
@@ -75,7 +75,8 @@ export const appRouter = t.router({
 
       if (!claimed) return null;
 
-      await postToThread(
+      await upsertStatusMessage(
+        claimed.id,
         claimed.threadId,
         `ℹ️ Worker **${input.workerId}** picked up the job`,
       );
@@ -137,7 +138,7 @@ export const appRouter = t.router({
 
       const emoji =
         input.level === "info" ? "ℹ️" : input.level === "success" ? "✅" : "❌";
-      await postToThread(job.threadId, `${emoji} ${input.message}`);
+      await upsertStatusMessage(input.jobId, job.threadId, `${emoji} ${input.message}`);
 
       return { success: true };
     }),
@@ -169,7 +170,7 @@ export const appRouter = t.router({
         where: { id: input.jobId },
         data: { status: "cancelled" },
       });
-      await postToThread(job.threadId, "❌ Job cancelled");
+      await upsertStatusMessage(input.jobId, job.threadId, "❌ Job cancelled");
       return { success: true };
     }),
 
