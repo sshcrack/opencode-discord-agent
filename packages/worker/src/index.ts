@@ -6,9 +6,12 @@ const {
   SHARED_SECRET,
   WORKER_ID = "default",
   DRY_RUN,
+  SKIP_PERMISSIONS = "true",
 } = process.env;
 
 const dryRun = DRY_RUN === "true";
+const skipPermissions = SKIP_PERMISSIONS === "true";
+const skipPermissionsArg = skipPermissions ? ["--dangerously-skip-permissions"] : [];
 
 if (!SHARED_SECRET) throw new Error("SHARED_SECRET is required");
 
@@ -358,7 +361,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
     jobLog(job.id, `Spawning: opencode run --model ${issueModel} --dir ${repoPath} --format json [${prompt.length} chars]`);
 
     const proc = Bun.spawn(
-      ["opencode", "run", "--model", issueModel, "--dir", repoPath, prompt, "--format", "json"],
+      ["opencode", "run", "--model", issueModel, "--dir", repoPath, prompt, "--format", "json", ...skipPermissionsArg],
       { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
     );
 
@@ -627,7 +630,7 @@ async function runOpencodeStreaming(
   argv: string[],
   extraArgs: string[] = [],
 ): Promise<{ planMd: string; sessionId: string }> {
-  const fullArgs = [...argv, "--format", "json", ...extraArgs];
+  const fullArgs = [...argv, "--format", "json", ...skipPermissionsArg, ...extraArgs];
   jobLog(jobId, `Spawning: ${fullArgs.join(" ")}`);
 
   const proc = Bun.spawn(fullArgs, {
