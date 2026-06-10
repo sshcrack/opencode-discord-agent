@@ -9,21 +9,7 @@ async function poll(): Promise<void> {
     workerLog(`Skipping poll — job #${getActiveJobId()} still active`);
     return;
   }
-
-  // Check if worker is up-to-date with bot on every poll
   const localHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
-
-  try {
-    const botHead = await client.getBotHead.query();
-    if (localHead && botHead.sha && botHead.sha !== "unknown" && localHead !== botHead.sha) {
-      workerLog(`Outdated (local: ${localHead.slice(0, 12)}, bot: ${botHead.sha.slice(0, 12)}) — updating...`);
-      runUpdate();
-      return;
-    }
-  } catch {
-    // Can't reach bot — poll anyway
-  }
-
   const start = performance.now();
   const result = await client.pollNextJob.query({ workerId: WORKER_ID, gitHead: localHead });
   if (result) {
