@@ -32,6 +32,7 @@ model Repository {
   id        Int      @id @default(autoincrement())
   slug      String   @unique
   path      String
+  originUrl String?
   isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
 }

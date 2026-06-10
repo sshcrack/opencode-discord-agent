@@ -1,5 +1,49 @@
 import { prisma } from "../db";
 import { postToThread } from "./helpers";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+function parseNameWithOwner(originUrl: string): string | null {
+  // git@github.com:owner/name.git  or  https://github.com/owner/name.git
+  const match =
+    originUrl.match(/github\.com[:\/](.+?)\.git$/) ||
+    originUrl.match(/github\.com[:\/](.+?)(\/)?$/);
+  return match?.[1] ?? null;
+}
+
+async function cloneRepo(repoSlug: string, originUrl: string): Promise<string> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `opencode-${repoSlug}-`));
+  const cloneProc = Bun.spawn(
+    ["git", "clone", originUrl, tmpDir, "--depth", "1"],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const [, stderr] = await Promise.all([
+    new Response(cloneProc.stdout).text(),
+    new Response(cloneProc.stderr).text(),
+  ]);
+  const cloneExit = await cloneProc.exited;
+  if (cloneExit !== 0) {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    throw new Error(`Git clone failed: ${stderr.slice(0, 500)}`);
+  }
+  return tmpDir;
+}
+
+async function getRepoNameWithOwner(repoPath: string): Promise<string> {
+  try {
+    const proc = Bun.spawn(
+      ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+      { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
+    );
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
+    if (exitCode === 0) return stdout.trim();
+    return "";
+  } catch {
+    return "";
+  }
+}
 
 export async function runFallback(
   jobId: number,
@@ -12,7 +56,25 @@ export async function runFallback(
 
   await postToThread(threadId, "ℹ️ No worker online — running fallback path...");
 
+  if (!repo.originUrl) {
+    await postToThread(threadId, "❌ No origin URL configured for this repo — add one via `/repo add --origin-url`");
+    return;
+  }
+
+  const nwo = parseNameWithOwner(repo.originUrl);
+  if (!nwo) {
+    await postToThread(threadId, `❌ Could not parse owner/name from origin URL: \`${repo.originUrl}\``);
+    return;
+  }
+
+  let tmpDir: string | null = null;
+
   try {
+    // Clone repo to temp directory
+    await postToThread(threadId, "ℹ️ Cloning repository...");
+    tmpDir = await cloneRepo(repoSlug, repo.originUrl);
+    await postToThread(threadId, `ℹ️ Cloned to \`${tmpDir}\``);
+
     // Mark as claimed so workers don't pick it up during fallback
     await prisma.job.update({
       where: { id: jobId },
@@ -30,7 +92,7 @@ export async function runFallback(
 
       const prompt = [
         `Analyse the following Discord thread context and produce a structured GitHub issue.`,
-        `Repository: ${repoSlug} (at ${repo.path})`,
+        `Repository: ${repoSlug}`,
         ``,
         `Output ONLY:`,
         `Line 1: The issue title (plain text, no markdown heading)`,
@@ -40,8 +102,10 @@ export async function runFallback(
         context,
       ].join("\n");
 
-      const proc = Bun.spawn(["opencode", "run", "--model", model, "--dir", repo.path, prompt], {
-        cwd: repo.path,
+      await postToThread(threadId, "ℹ️ Generating issue with opencode...");
+
+      const proc = Bun.spawn(["opencode", "run", "--model", model, "--dir", tmpDir, prompt], {
+        cwd: tmpDir,
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -64,23 +128,14 @@ export async function runFallback(
 
       await postToThread(threadId, "ℹ️ Creating GitHub issue...");
 
-      const repoNameWithOwner = await getRepoNameWithOwner(repo.path);
-
-      if (!repoNameWithOwner) {
-        await postToThread(threadId, "❌ Could not determine GitHub repository owner/name");
-        await prisma.job.update({ where: { id: jobId }, data: { status: "failed" } });
-        return;
-      }
-
       const ghArgs = [
         "issue", "create",
         "--title", title,
         "--body", body,
-        "--repo", repoNameWithOwner,
+        "--repo", nwo,
       ];
 
       const ghProc = Bun.spawn(["gh", ...ghArgs], {
-        cwd: repo.path,
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -107,18 +162,14 @@ export async function runFallback(
 
       await postToThread(threadId, `✅ Issue created: ${issueUrl}`);
     } else {
-      const repoNameWithOwner = await getRepoNameWithOwner(repo.path);
-      if (!repoNameWithOwner) {
-        await postToThread(threadId, "❌ Could not determine GitHub repository owner/name");
-        await prisma.job.update({ where: { id: jobId }, data: { status: "failed" } });
-        return;
-      }
-      issueUrl = `https://github.com/${repoNameWithOwner}/issues/${issueNumber}`;
+      issueUrl = `https://github.com/${nwo}/issues/${issueNumber}`;
     }
+
+    await postToThread(threadId, "ℹ️ Triggering opencode on the issue...");
 
     const commentProc = Bun.spawn(
       ["gh", "issue", "comment", issueUrl, "--body", "/opencode fix this issue in a PR"],
-      { cwd: repo.path, stdout: "pipe", stderr: "pipe" },
+      { stdout: "pipe", stderr: "pipe" },
     );
     await commentProc.exited;
 
@@ -127,21 +178,10 @@ export async function runFallback(
   } catch (err) {
     await postToThread(threadId, `❌ Fallback path error: ${err}`);
     await prisma.job.update({ where: { id: jobId }, data: { status: "failed" } });
-  }
-}
-
-async function getRepoNameWithOwner(repoPath: string): Promise<string> {
-  try {
-    const proc = Bun.spawn(
-      ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
-      { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
-    );
-    const stdout = await new Response(proc.stdout).text();
-    const exitCode = await proc.exited;
-    if (exitCode === 0) return stdout.trim();
-    return "";
-  } catch {
-    return "";
+  } finally {
+    if (tmpDir) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   }
 }
 

@@ -16,7 +16,10 @@ export class RepoCommand extends Command {
         .setName("add")
         .setDescription("Register a new repository")
         .addStringOption(o => o.setName("slug").setDescription("Human-readable slug").setRequired(true))
-        .addStringOption(o => o.setName("path").setDescription("Absolute path on filesystem").setRequired(true)),
+        .addStringOption(o => o.setName("path").setDescription("Absolute path on filesystem").setRequired(true))
+        .addStringOption(o =>
+          o.setName("origin-url").setDescription("Git remote URL for cloning (required for fallback)").setRequired(false),
+        ),
     )
     .addSubcommand(
       new SlashCommandSubcommandBuilder()
@@ -48,6 +51,7 @@ export class RepoCommand extends Command {
     if (subcommand === "add") {
       const slug = interaction.options.getString("slug", true);
       const path = interaction.options.getString("path", true);
+      const originUrl = interaction.options.getString("origin-url") || undefined;
 
       if (!existsSync(path)) {
         await interaction.reply({ content: `:x: Path \`${path}\` does not exist`, ephemeral: true });
@@ -62,10 +66,13 @@ export class RepoCommand extends Command {
 
       const repoCount = await prisma.repository.count();
       const repo = await prisma.repository.create({
-        data: { slug, path, isDefault: repoCount === 0 },
+        data: { slug, path, originUrl, isDefault: repoCount === 0 },
       });
 
-      await interaction.reply(`:white_check_mark: Repository \`${slug}\` added${repo.isDefault ? " (set as default)" : ""}`);
+      const parts = [`\`${slug}\` added`];
+      if (repo.isDefault) parts.push("set as default");
+      if (!originUrl) parts.push("no origin URL — fallback will be unavailable");
+      await interaction.reply(`:white_check_mark: ${parts.join(" — ")}`);
     } else if (subcommand === "remove") {
       const slug = interaction.options.getString("slug", true);
       const repo = await prisma.repository.findUnique({ where: { slug } });
