@@ -33,10 +33,25 @@ Three-package Bun workspace — no frontend, no tests:
 bun install
 cp .env.example packages/bot/.env
 bun run db:generate    # bunx --bun prisma generate —cwd packages/bot
-bun run db:push        # bunx --bun prisma db push —cwd packages/bot
+bun run db:migrate     # bunx --bun prisma migrate dev —cwd packages/bot
 ```
 
 `packages/bot/.env` needs `DISCORD_TOKEN`, `CLIENT_ID`, `SHARED_SECRET`, `DATABASE_URL`. Worker reads env from shell or its own `.env`.
+
+## Schema changes (must use migrations)
+
+Always use `prisma migrate dev --name <name>` for schema changes, never `prisma db push` (it skips migration tracking).
+
+```bash
+# Create and apply a new migration
+bun run --cwd packages/bot prisma migrate dev --name describe_change
+
+# Create migration without applying (when DB already has the change)
+bun run --cwd packages/bot prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script > prisma/migrations/<timestamp>_<name>/migration.sql
+bun run --cwd packages/bot prisma migrate resolve --applied <timestamp>_<name>
+```
+
+Run all prisma commands with `bunx --bun prisma` from `packages/bot/`. The `prisma.config.ts` loads `DATABASE_URL` from `.env`.
 
 ## Running
 
@@ -71,7 +86,7 @@ No tests exist in this repo — `bun test` finds nothing.
 
 - **tRPC router stubs** live in `packages/shared/src/router.ts` but throw "Not implemented" — the real implementation is in `packages/bot/src/trpc/router.ts` using Prisma. Shared package is for type safety between bot and worker only.
 - **Auth**: All tRPC calls authenticated via `Authorization: Bearer <SHARED_SECRET>`. Bot's tRPC server (`packages/bot/src/trpc/server.ts`) verifies on every request.
-- **Prisma v7+**: `prisma-client` generator with engineType `"client"` (no binary engine). Run all prisma commands with `bunx --bun prisma ... --cwd packages/bot`.
+- **Prisma v7+**: `prisma-client` generator with engineType `"client"` (no binary engine). Run all prisma commands with `bunx --bun prisma` from `packages/bot/` (the `prisma.config.ts` picks up env vars there).
 - **Worker doesn't clone repos** — assumes the registered path exists on disk. Uses `gwq` (git worktree manager) to create branches. Requires `gwq`, `opencode`, and `gh` CLI on PATH.
 - **env vars only for secrets/URLs** — models, auto-mode, verbose-mode are all stored in the `Setting` database table, not env.
 - **No `.github/` CI** — infrastructure-less design, runs on dev laptop.
