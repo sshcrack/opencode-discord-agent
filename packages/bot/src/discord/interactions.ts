@@ -1,5 +1,6 @@
 import { AutocompleteInteraction, ButtonInteraction, Message, Collection } from "discord.js";
 import { prisma } from "../db";
+import { extractPlanFromUrl, postPlan } from "./plan";
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
   const focusedValue = interaction.options.getFocused();
@@ -82,7 +83,28 @@ export async function handleButton(interaction: ButtonInteraction) {
     });
 
     collector.on("collect", async (msg) => {
-      const suggestion = msg.content.trim();
+      const content = msg.content.trim();
+
+      // Check if the message is a plan URL (markdown viewer or shortened)
+      if (content.startsWith("http")) {
+        const planMd = await extractPlanFromUrl(content);
+        if (planMd) {
+          const job = await prisma.job.findUnique({ where: { id: jobId } });
+          if (job) {
+            await prisma.job.update({
+              where: { id: jobId },
+              data: { status: "plan_ready", planMd },
+            });
+            const updated = await prisma.job.findUnique({ where: { id: jobId } });
+            if (updated) await postPlan({ ...updated, autoMode: updated.autoMode ?? false }, planMd);
+            await interaction.followUp("✅ Plan updated from your link!");
+          }
+          return;
+        }
+        // URL didn't decode — fall through to treat as text
+      }
+
+      const suggestion = content;
 
       await prisma.job.update({
         where: { id: jobId },

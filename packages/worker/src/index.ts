@@ -155,7 +155,8 @@ async function handleJob(job: Job) {
       await postInfo(job.id, "Generating GitHub issue...");
 
       const stepStart = performance.now();
-      issueNumber = await generateIssue(job, repoPath);
+      const { issueNumber: genIssueNumber, issueTitle } = await generateIssue(job, repoPath);
+      issueNumber = genIssueNumber;
       jobLog(job.id, `Issue generation completed in ${(performance.now() - stepStart).toFixed(0)}ms, issue #${issueNumber ?? "N/A"}`);
 
       if (issueNumber !== null) {
@@ -170,6 +171,9 @@ async function handleJob(job: Job) {
           message: `Issue created: ${issueUrl}`,
           level: "success",
         });
+        // Rename thread to "#{issueNumber} {title}"
+        const threadName = `#${issueNumber} ${issueTitle.replace(/^#+\s*/, "").trim()}`.slice(0, 100);
+        await client.renameJobThread.mutate({ jobId: job.id, name: threadName }).catch(() => {});
       }
     }
 
@@ -306,7 +310,7 @@ async function getRepoNameWithOwner(repoPath: string): Promise<string> {
 
 // ── Issue generation ─────────────────────────────────────────────────────────
 
-async function generateIssue(job: Job, repoPath: string): Promise<number | null> {
+async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber: number | null; issueTitle: string }> {
   try {
     const issueModel = await getIssueModel();
     jobLog(job.id, `Issue model: ${issueModel}`);
@@ -334,7 +338,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
       jobLog(job.id, `[DRY RUN] Would run: opencode run --model ${issueModel} --print ...`);
       jobLog(job.id, `[DRY RUN] Would run: gh issue create --title ... --body ...`);
       await postInfo(job.id, `[DRY RUN] Issue generation skipped — prompt logged to worker console`);
-      return null;
+      return { issueNumber: null, issueTitle: "" };
     }
 
     const runStart = performance.now();
@@ -398,7 +402,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
         message: `Issue generation failed (exit ${exitCode}): ${stderrContent.slice(0, 300)}`,
         level: "error",
       });
-      return null;
+      return { issueNumber: null, issueTitle: "" };
     }
 
     const lines = issueText.trim().split("\n");
@@ -436,15 +440,15 @@ async function generateIssue(job: Job, repoPath: string): Promise<number | null>
       if (match && match[1]) {
         const num = parseInt(match[1]);
         jobLog(job.id, `Created issue #${num}: ${ghOutput.trim()}`);
-        return num;
+        return { issueNumber: num, issueTitle: title };
       }
     }
 
     jobLog(job.id, `gh issue create returned non-zero exit ${ghExit}`);
-    return null;
+    return { issueNumber: null, issueTitle: title };
   } catch (err) {
     jobLog(job.id, `Issue generation error:`, err);
-    return null;
+    return { issueNumber: null, issueTitle: "" };
   }
 }
 
@@ -550,11 +554,8 @@ function formatToolUse(part: any, cwd?: string): EventResult {
       return { message: `🔍 \`${pattern}\``, level: "debug", append: true };
     }
 
-    default: {
-      const path = input.filePath || input.path || "";
-      const suffix = path ? ` \`${shortPath(path, cwd)}\`` : "";
-      return { message: `🛠️ ${tool}${suffix}`, level: "debug", append: true };
-    }
+    default:
+      return null;
   }
 }
 
@@ -791,21 +792,50 @@ async function waitForApproval(
         level: "info",
       });
 
-      // Resume opencode session with suggestion
-      jobLog(jobId, `Resuming opencode session ${currentSession} with suggestion`);
       const reviseStart = performance.now();
-      const { planMd: newPlan, sessionId: newSession } = await runOpencodeStreaming(
-        jobId,
-        worktreePath,
-        [
-          "opencode", "run",
-          "--agent", "plan",
-          "--session", currentSession,
-          "--continue",
-          "--dir", worktreePath,
-          suggestion,
-        ],
-      );
+      let newPlan: string;
+      let newSession: string;
+
+      if (currentSession) {
+        // Resume existing opencode session with suggestion
+        jobLog(jobId, `Resuming opencode session ${currentSession} with suggestion`);
+        const result = await runOpencodeStreaming(
+          jobId,
+          worktreePath,
+          [
+            "opencode", "run",
+            "--agent", "plan",
+            "--session", currentSession,
+            "--continue",
+            "--dir", worktreePath,
+            suggestion,
+          ],
+        );
+        newPlan = result.planMd;
+        newSession = result.sessionId;
+      } else {
+        // No session — start a fresh plan agent with the suggestion as prompt
+        jobLog(jobId, `No session to resume, starting fresh plan agent`);
+        const issueRef = current.issueNumber
+          ? ` The related GitHub issue is #${current.issueNumber}.`
+          : "";
+        const prompt = [
+          `You are a planning agent for a ${current.kind} task on repository ${current.repoSlug}.${issueRef}`,
+          `Review the codebase and write a detailed implementation plan based on this suggestion: "${suggestion}".`,
+          `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
+          `The plan should cover: files to change, approach, and any risk areas.`,
+          `After saving the plan file, report the exact path where it was saved by writing a single line at the end of your response in this exact format: PLAN_PATH:/path/to/your/plan.md`,
+          current.context ? `\n\nDiscord report context:\n${current.context}` : "",
+        ].filter(Boolean).join(" ");
+        const result = await runOpencodeStreaming(
+          jobId,
+          worktreePath,
+          ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt],
+        );
+        newPlan = result.planMd;
+        newSession = result.sessionId;
+      }
+
       jobLog(jobId, `Plan revision completed in ${(performance.now() - reviseStart).toFixed(0)}ms, new session: ${newSession}`);
 
       currentSession = newSession || currentSession;

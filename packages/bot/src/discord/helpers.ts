@@ -18,6 +18,17 @@ export async function postToThread(threadId: string, content: string) {
   }
 }
 
+export async function renameThread(threadId: string, name: string) {
+  try {
+    const channel = await getClient().channels.fetch(threadId);
+    if (channel?.isThread()) {
+      await channel.setName(name);
+    }
+  } catch (err) {
+    console.error(`Failed to rename thread ${threadId}:`, err);
+  }
+}
+
 export async function upsertStatusMessage(
   jobId: number,
   threadId: string,

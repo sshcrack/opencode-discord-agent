@@ -138,3 +138,8 @@ export const TypingInput = z.object({
   jobId: z.number(),
   threadId: z.string(),
 });
+
+export const RenameThreadInput = z.object({
+  jobId: z.number(),
+  name: z.string().max(100),
+});

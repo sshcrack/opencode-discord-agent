@@ -9,6 +9,7 @@ import {
   SuggestChangesInput,
   AckSuggestionInput,
   SetIssueNumberInput,
+  RenameThreadInput,
   JobSchema,
   StatusResult,
   GetSettingInput,
@@ -16,7 +17,7 @@ import {
   TypingInput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread, upsertStatusMessage, getClient } from "../discord/helpers";
+import { postToThread, upsertStatusMessage, renameThread, getClient } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
 import type { Job } from "../db/generated/client";
 import { TextChannel, ThreadChannel } from "discord.js";
@@ -238,6 +239,16 @@ export const appRouter = t.router({
         where: { id: input.jobId },
         data: { issueNumber: input.issueNumber },
       });
+      return { success: true };
+    }),
+
+  renameJobThread: t.procedure
+    .input(RenameThreadInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const job = await prisma.job.findUnique({ where: { id: input.jobId } });
+      if (!job) return { success: false };
+      await renameThread(job.threadId, input.name);
       return { success: true };
     }),
 

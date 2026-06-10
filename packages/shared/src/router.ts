@@ -13,6 +13,7 @@ import {
   GetSettingInput,
   GetSettingOutput,
   SetIssueNumberInput,
+  RenameThreadInput,
   TypingInput,
 } from "./schemas";
 
@@ -84,6 +85,13 @@ export const appRouter = t.router({
 
   setIssueNumber: t.procedure
     .input(SetIssueNumberInput)
+    .output(StatusResult)
+    .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  renameJobThread: t.procedure
+    .input(RenameThreadInput)
     .output(StatusResult)
     .mutation(async () => {
       throw new Error("Not implemented in shared package");
