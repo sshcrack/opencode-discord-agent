@@ -90,6 +90,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const previewWorkerRequests = new Map();
   const previewSegmentHtmlCache = new Map();
   let previewSegmentCacheTabId = null;
+  let _planPollInterval = null;
+  let _planLastContent = null;
 
   const markdownEditor = document.getElementById("markdown-editor");
   const markdownPreview = document.getElementById("markdown-preview");
@@ -9259,12 +9261,11 @@ document.addEventListener("DOMContentLoaded", function () {
   // ========================================
   // PLAN VIEWER MODE
   // ========================================
-  let _planPollInterval = null;
-  let _planLastContent = null;
 
   function loadFromPlanApi() {
     if (!window.__PLAN_MODE__) return;
     var mode = window.__PLAN_MODE__;
+    markdownEditor.value = '';
     var bar = document.getElementById('plan-viewer-bar');
     if (bar) bar.style.display = 'flex';
     var shareBtn = document.getElementById('share-button');
