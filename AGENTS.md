@@ -43,15 +43,15 @@ bun run db:migrate     # bunx --bun prisma migrate dev —cwd packages/bot
 Always use `prisma migrate dev --name <name>` for schema changes, never `prisma db push` (it skips migration tracking).
 
 ```bash
-# Create and apply a new migration
 bun run --cwd packages/bot prisma migrate dev --name describe_change
-
-# Create migration without applying (when DB already has the change)
-bun run --cwd packages/bot prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script > prisma/migrations/<timestamp>_<name>/migration.sql
-bun run --cwd packages/bot prisma migrate resolve --applied <timestamp>_<name>
+bunx --bun prisma generate --schema=packages/bot/prisma/schema.prisma
 ```
 
-Run all prisma commands with `bunx --bun prisma` from `packages/bot/`. The `prisma.config.ts` loads `DATABASE_URL` from `.env`.
+Run all prisma commands from `packages/bot/` where `prisma.config.ts` loads `DATABASE_URL` from `.env`.
+
+Important: `prisma migrate dev --name` compares the migration history with the current schema and fails if it detects drift. If you've already changed the DB outside of migrations (e.g., via `db push`), you must:
+1. Delete the shadow database: `rm -rf packages/bot/prisma/migrations/*/migration.sql` won't fix it — instead drop `packages/bot/prisma/dev.db` and re-run `prisma migrate dev` from scratch
+2. Or manually ensure `prisma/migrations/*/migration.sql` files match the current DB state and use `prisma migrate resolve --applied` to mark them
 
 ## Running
 
