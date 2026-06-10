@@ -63,13 +63,17 @@ case "${1:-}" in
     stop_daemon
     ;;
   *)
-    # Foreground — source .env and run directly
+    # Foreground — source .env and run in restart loop
     cd "$ROOT"
     if [ -f .env ]; then
       set -a
       source .env
       set +a
     fi
-    exec bun run --cwd packages/worker dev
+    while true; do
+      bun run --cwd packages/worker dev
+      echo "[runner] Worker exited at $(date), restarting in 1s..."
+      sleep 1
+    done
     ;;
 esac
