@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, CommandInteraction } from "discord.js";
 import { Command } from "./Command";
+import { prisma } from "../../db";
 
 export class UpdateCommand extends Command {
   data = new SlashCommandBuilder()
@@ -23,7 +24,19 @@ export class UpdateCommand extends Command {
     }
 
     const output = pull.stdout.toString().trim();
-    await interaction.editReply(`✅ Updated.\n\`\`\`\n${output.slice(0, 1500)}\n\`\`\`\nRestarting...`);
+
+    await prisma.$disconnect();
+
+    const botDir = `${gitRoot}/packages/bot`;
+    const migrate = Bun.spawnSync(["bun", "--bun", "prisma", "migrate", "deploy"], { cwd: botDir });
+    const migrateOk = migrate.exitCode === 0;
+    const migrateOutput = migrateOk
+      ? ""
+      : `\n❌ Migration failed: ${migrate.stderr.toString().slice(0, 500)}`;
+
+    await interaction.editReply(
+      `✅ Updated.\n\`\`\`\n${output.slice(0, 1500)}\n\`\`\`${migrateOutput}\nRestarting...`,
+    );
 
     process.exit(0);
   }

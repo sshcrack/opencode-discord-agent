@@ -4,7 +4,6 @@ import {
   CommandInteraction,
 } from "discord.js";
 import { prisma } from "../../db";
-import { existsSync } from "fs";
 import { Command } from "./Command";
 
 export class RepoCommand extends Command {
@@ -52,11 +51,6 @@ export class RepoCommand extends Command {
       const slug = interaction.options.getString("slug", true);
       const path = interaction.options.getString("path", true);
       const originUrl = interaction.options.getString("origin-url") || undefined;
-
-      if (!existsSync(path)) {
-        await interaction.reply({ content: `:x: Path \`${path}\` does not exist`, ephemeral: true });
-        return;
-      }
 
       const existing = await prisma.repository.findUnique({ where: { slug } });
       if (existing) {

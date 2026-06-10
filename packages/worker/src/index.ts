@@ -111,6 +111,18 @@ async function handleJob(job: Job) {
     return;
   }
 
+  if (Bun.spawnSync(["test", "-d", repoPath]).exitCode !== 0) {
+    jobLog(job.id, `Repository path ${repoPath} does not exist on worker — cancelling`);
+    await client.postStatus.mutate({
+      jobId: job.id,
+      message: `Repository path \`${repoPath}\` does not exist on worker filesystem`,
+      level: "error",
+    });
+    await client.cancelJob.mutate({ jobId: job.id });
+    activeJobId = null;
+    return;
+  }
+
   jobLog(job.id, `Starting job for ${job.repoSlug} at ${repoPath} (kind: ${job.kind}, auto: ${job.autoMode}, dryRun: ${dryRun})`);
   if (job.issueNumber) jobLog(job.id, `Pre-existing issue #${job.issueNumber}`);
   if (job.context) jobLog(job.id, `Context length: ${job.context.length} chars`);
