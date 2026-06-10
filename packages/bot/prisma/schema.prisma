@@ -54,6 +54,7 @@ model Job {
   status            JobStatus  @default(pending)
   context           String?
   workerId          String?
+  reporterId        String?
   planMd            String?
   opencodeSessionId String?
   issueNumber       Int?

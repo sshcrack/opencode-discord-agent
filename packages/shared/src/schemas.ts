@@ -45,6 +45,7 @@ export const JobSchema = z.object({
   status: JobStatus,
   context: z.string().nullable(),
   workerId: z.string().nullable(),
+  reporterId: z.string().nullable(),
   planMd: z.string().nullable(),
   opencodeSessionId: z.string().nullable(),
   issueNumber: z.number().nullable(),
@@ -131,4 +132,9 @@ export const SetIssueNumberInput = z.object({
 
 export const GetSettingOutput = z.object({
   value: z.string().nullable(),
+});
+
+export const TypingInput = z.object({
+  jobId: z.number(),
+  threadId: z.string(),
 });

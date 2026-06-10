@@ -17,15 +17,16 @@ function makePlanUrl(content: string): string {
 }
 
 export async function postPlan(
-  job: { id: number; threadId: string; autoMode: boolean },
+  job: { id: number; threadId: string; autoMode: boolean; reporterId: string | null },
   planMd: string,
 ) {
   const planUrl = makePlanUrl(planMd);
+  const ping = job.reporterId ? `<@${job.reporterId}> ` : "";
 
   const embed = new EmbedBuilder()
     .setTitle("📋 Planning Complete")
     .setDescription(
-      `📝 [Open and edit the plan](${planUrl})\n` +
+      `${ping}📝 [Open and edit the plan](${planUrl})\n` +
       `After editing, submit the updated plan using the link above, or use the buttons below.`
     )
     .setColor(0x5865f2);

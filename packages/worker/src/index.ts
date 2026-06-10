@@ -52,6 +52,23 @@ async function getIssueModel(): Promise<string> {
 }
 
 let activeJobId: number | null = null;
+let typingInterval: Timer | null = null;
+
+function startTyping(threadId: string, jobId: number) {
+  stopTyping();
+  typingInterval = setInterval(async () => {
+    await client.typing.mutate({ jobId, threadId }).catch(() => {});
+  }, 8_000);
+  // Fire immediately for initial indicator
+  client.typing.mutate({ jobId, threadId }).catch(() => {});
+}
+
+function stopTyping() {
+  if (typingInterval) {
+    clearInterval(typingInterval);
+    typingInterval = null;
+  }
+}
 
 async function poll(): Promise<void> {
   if (activeJobId !== null) {
@@ -97,6 +114,8 @@ async function handleJob(job: Job) {
   jobLog(job.id, `Starting job for ${job.repoSlug} at ${repoPath} (kind: ${job.kind}, auto: ${job.autoMode}, dryRun: ${dryRun})`);
   if (job.issueNumber) jobLog(job.id, `Pre-existing issue #${job.issueNumber}`);
   if (job.context) jobLog(job.id, `Context length: ${job.context.length} chars`);
+
+  startTyping(job.threadId, job.id);
 
   const jobStart = performance.now();
 
@@ -166,7 +185,8 @@ async function handleJob(job: Job) {
         message: "Job cancelled",
         level: "error",
       });
-      cleanupWorktree(worktreePath).catch(() => {});
+      stopTyping();
+      cleanupWorktree(repoPath, branch).catch(() => {});
       activeJobId = null;
       return;
     }
@@ -192,16 +212,23 @@ async function handleJob(job: Job) {
         message: "Job complete! 🎉",
         level: "success",
       });
+      await client.postStatus.mutate({
+        jobId: job.id,
+        message: `<@${job.reporterId}> your PR is ready!`,
+        level: "info",
+      });
     } else {
       jobLog(job.id, `PR creation failed or returned no URL`);
     }
 
-    cleanupWorktree(worktreePath).catch(() => {});
+    stopTyping();
+    cleanupWorktree(repoPath, branch).catch(() => {});
   } catch (err: any) {
     const elapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
     jobLog(job.id, `Job FAILED after ${elapsed}s: ${err?.message ?? String(err)}`);
     if (err?.stack) jobLog(job.id, `Stack: ${err.stack}`);
     console.error(err);
+    stopTyping();
     await client.postStatus.mutate({
       jobId: job.id,
       message: `Job failed: ${err?.message ?? String(err)}`,
@@ -211,6 +238,7 @@ async function handleJob(job: Job) {
 
   const totalElapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
   jobLog(job.id, `Job finished in ${totalElapsed}s`);
+  stopTyping();
   activeJobId = null;
 }
 
@@ -235,12 +263,18 @@ async function createWorktree(repoPath: string, branch: string, jobId: number): 
   return worktreePath;
 }
 
-async function cleanupWorktree(worktreePath: string) {
+async function cleanupWorktree(repoPath: string, branch: string) {
+  if (dryRun) return;
   try {
-    jobLog(0, `Cleaning up worktree: ${worktreePath}`);
-    await execCommand("gwq", ["remove", worktreePath], undefined, 0);
-  } catch (err) {
-    jobLog(0, "Worktree cleanup error:", err);
+    jobLog(0, `Cleaning up worktree for branch ${branch}`);
+    await execCommand("gwq", ["remove", "-f", branch], repoPath, 0);
+  } catch (err: any) {
+    const msg = err?.message ?? String(err);
+    if (msg.includes("no removable worktrees found")) {
+      jobLog(0, `No worktree to remove for ${branch} (already clean)`);
+    } else {
+      jobLog(0, "Worktree cleanup error:", msg);
+    }
   }
 }
 
@@ -415,9 +449,10 @@ async function runPlanAgent(
     : "";
   const prompt = [
     `You are a planning agent for a ${job.kind} task on repository ${job.repoSlug}.${issueRef}`,
-    `Review the codebase and write a detailed implementation plan to PLAN.md at the root of this directory.`,
+    `Review the codebase and write a detailed implementation plan.`,
     `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
     `The plan should cover: files to change, approach, and any risk areas.`,
+    `After saving the plan file, report the exact path where it was saved by writing a single line at the end of your response in this exact format: PLAN_PATH:/path/to/your/plan.md`,
     contextBlock,
   ].filter(Boolean).join(" ");
 
@@ -552,6 +587,14 @@ function handleJsonEvent(event: any, jobId: number, cwd: string): EventResult {
   }
 }
 
+function extractPlanPath(text: string): string | null {
+  const match = text.match(/PLAN_PATH:(.+)/);
+  if (match?.[1]) return match[1].trim();
+  const altMatch = text.match(/The plan has been written to (.+)/);
+  if (altMatch?.[1]) return altMatch[1].trim();
+  return null;
+}
+
 async function runOpencodeStreaming(
   jobId: number,
   cwd: string,
@@ -568,6 +611,7 @@ async function runOpencodeStreaming(
   });
 
   let sessionId = "";
+  let planPath: string | null = null;
   const textParts: string[] = [];
   let lineCount = 0;
   let buffer = "";
@@ -615,7 +659,13 @@ async function runOpencodeStreaming(
 
         // Accumulate text for plan fallback
         if (event.type === "text" && event.part?.text?.trim()) {
-          textParts.push(event.part.text.trim());
+          const text = event.part.text.trim();
+          textParts.push(text);
+          // Look for plan path marker in planning agent output
+          if (!planPath) {
+            const extracted = extractPlanPath(text);
+            if (extracted) planPath = extracted;
+          }
         }
       }
     }
@@ -651,15 +701,20 @@ async function runOpencodeStreaming(
     throw new Error(`opencode failed (exit ${exitCode}): ${stderr.slice(0, 500)}`);
   }
 
-  jobLog(jobId, `Reading PLAN.md from ${cwd}/PLAN.md`);
-  const planMd = await Bun.file(`${cwd}/PLAN.md`).text().catch(() => {
-    if (textParts.length > 0) {
-      jobLog(jobId, `PLAN.md not found, fallback to ${textParts.length} text parts`);
+  let planMd: string;
+  if (planPath) {
+    jobLog(jobId, `Reading plan from reported path: ${planPath}`);
+    planMd = await Bun.file(planPath).text().catch(() => {
+      jobLog(jobId, `Failed to read plan from ${planPath}, falling back to text`);
       return textParts.join("\n\n");
-    }
-    jobLog(jobId, `PLAN.md not found, no text fallback`);
-    return "";
-  });
+    });
+  } else if (textParts.length > 0) {
+    jobLog(jobId, `No plan path reported, using ${textParts.length} text parts`);
+    planMd = textParts.join("\n\n");
+  } else {
+    jobLog(jobId, `No plan path or text content available`);
+    planMd = "";
+  }
 
   if (!sessionId) {
     jobLog(jobId, `No session ID detected`);

@@ -57,6 +57,7 @@ export class SubmitCommand extends Command {
         status: "pending",
         autoMode,
         context,
+        reporterId: interaction.user.id,
       },
     });
 

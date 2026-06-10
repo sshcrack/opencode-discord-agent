@@ -13,11 +13,13 @@ import {
   StatusResult,
   GetSettingInput,
   GetSettingOutput,
+  TypingInput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread, upsertStatusMessage } from "../discord/helpers";
+import { postToThread, upsertStatusMessage, getClient } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
 import type { Job } from "../db/generated/client";
+import { TextChannel, ThreadChannel } from "discord.js";
 
 function toJobOutput(job: Job) {
   return {
@@ -29,6 +31,7 @@ function toJobOutput(job: Job) {
     status: job.status,
     context: job.context,
     workerId: job.workerId,
+    reporterId: job.reporterId,
     planMd: job.planMd,
     opencodeSessionId: job.opencodeSessionId,
     issueNumber: job.issueNumber,
@@ -236,6 +239,21 @@ export const appRouter = t.router({
         data: { issueNumber: input.issueNumber },
       });
       return { success: true };
+    }),
+
+  typing: t.procedure
+    .input(TypingInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      try {
+        const channel = await getClient().channels.fetch(input.threadId);
+        if (channel?.isTextBased()) {
+          await (channel as TextChannel | ThreadChannel).sendTyping();
+        }
+        return { success: true };
+      } catch {
+        return { success: false };
+      }
     }),
 });
 
