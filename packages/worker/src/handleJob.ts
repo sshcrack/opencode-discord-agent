@@ -61,80 +61,47 @@ async function handleJob(job: Job) {
     }
 
     // Create Discord helper script for agent use
-    helperPath = `/tmp/opencode-discord-${job.id}.sh`;
-    const helperLines: string[] = [
-      '#!/bin/bash',
-      '',
-      `BOT_URL="${BOT_URL}"`,
-      `TOKEN="${SHARED_SECRET}"`,
-      `JOB_ID=${job.id}`,
-      '',
-      '# JSON-escape a string for safe embedding in curl -d',
-      '_json_esc() {',
-      '  local s="$1"',
-      '  s="${s//\\\\/\\\\\\\\}"',
-      '  s="${s//\\"/\\\\\\"}"',
-      '  printf "%s" "$s"',
-      '}',
-      '',
-    ];
+    helperPath = `/tmp/opencode-discord-${job.id}.ts`;
+    const helperScript = `#!/usr/bin/env bun
 
-    // Ask command — only available when not in auto mode
-    if (!job.autoMode) {
-      helperLines.push(
-        'if [ "$1" = "ask" ]; then',
-        '  shift',
-        '  QUESTIONS_JSON="$*"',
-        `  echo "$QUESTIONS_JSON" > "/tmp/opencode-ask-${job.id}.json"`,
-        `  BODY='{"jobId":'"$JOB_ID"',"questions":'"$QUESTIONS_JSON"'}'`,
-        '  curl -s -X POST "$BOT_URL/trpc/askQuestion" \\',
-        '    -H "Authorization: Bearer $TOKEN" \\',
-        '    -H "Content-Type: application/json" \\',
-        '    -d "$BODY" > /dev/null',
-        '  echo "[ Waiting for answers in Discord thread... ]" >&2',
-        '  while true; do',
-        '    sleep 3',
-        '    RESULT=$(curl -s -X POST "$BOT_URL/trpc/pollAnswer" \\',
-        '      -H "Authorization: Bearer $TOKEN" \\',
-        '      -H "Content-Type: application/json" \\',
-        `      -d '{"jobId":'"$JOB_ID"'})`,
-        '    ANSWER=$(echo "$RESULT" | bun -e "',
-        '      const r = JSON.parse(await Bun.stdin.text());',
-        '      const d = r?.result?.data;',
-        `      if (d?.answered && d?.formatted) console.log(d.formatted);`,
-        '    ")',
-        '    if [ -n "$ANSWER" ]; then',
-        '      echo "$ANSWER"',
-        '      break',
-        '    fi',
-        '  done',
-        `  rm -f "/tmp/opencode-ask-${job.id}.json"`,
-        'elif [ "$1" = "--rename" ]; then',
-      );
-    } else {
-      helperLines.push(
-        'if [ "$1" = "--rename" ]; then',
-      );
+const BOT_URL = "${BOT_URL}";
+const TOKEN = "${SHARED_SECRET}";
+const JOB_ID = ${job.id};
+
+async function trpc(path: string, input: unknown) {
+  const res = await fetch(BOT_URL + "/trpc/" + path, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + TOKEN,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+  return res.json();
+}
+
+const cmd = process.argv[2];
+
+if (cmd === "ask") {
+  const questions = JSON.parse(process.argv.slice(3).join(" "));
+  await trpc("askQuestion", { jobId: JOB_ID, questions });
+  console.error("[ Waiting for answers in Discord thread... ]");
+  while (true) {
+    await new Promise(r => setTimeout(r, 3000));
+    const res = await trpc("pollAnswer", { jobId: JOB_ID });
+    const d = res?.result?.data;
+    if (d?.answered && d?.formatted) {
+      console.log(d.formatted);
+      break;
     }
-
-    helperLines.push(
-      '  shift',
-      '  NAME="$*"',
-      '  NAME_ESC=$(_json_esc "$NAME")',
-      '  curl -s -X POST "$BOT_URL/trpc/renameJobThread" \\',
-      '    -H "Authorization: Bearer $TOKEN" \\',
-      '    -H "Content-Type: application/json" \\',
-      '    -d \'{"jobId":\'"$JOB_ID"\',"name":"\'"$NAME_ESC"\'"}\' > /dev/null',
-      'else',
-      '  MSG_ESC=$(_json_esc "$1")',
-      '  LVL_ESC=$(_json_esc "${2:-info}")',
-      '  curl -s -X POST "$BOT_URL/trpc/postStatus" \\',
-      '    -H "Authorization: Bearer $TOKEN" \\',
-      '    -H "Content-Type: application/json" \\',
-      '    -d \'{"jobId":\'"$JOB_ID"\',"message":"\'"$MSG_ESC"\',"level":"\'"$LVL_ESC"\'"}\' > /dev/null',
-      'fi',
-    );
-    await Bun.write(helperPath, helperLines.join('\n'));
+  }
+} else if (cmd === "--rename") {
+  await trpc("renameJobThread", { jobId: JOB_ID, name: process.argv[3] });
+} else {
+  await trpc("postStatus", { jobId: JOB_ID, message: cmd ?? "", level: process.argv[3] ?? "info" });
+}
+`;
+    await Bun.write(helperPath, helperScript);
     Bun.spawnSync(["chmod", "700", helperPath]);
     jobLog(job.id, `Discord helper created at ${helperPath}`);
 

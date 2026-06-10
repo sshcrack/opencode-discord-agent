@@ -127,9 +127,7 @@ async function recordAnswer(jobId: number, answer: string) {
     await prisma.job.update({
       where: { id: jobId },
       data: {
-        pendingQuestions: null,
-        pendingQuestionIndex: null,
-        pendingAnswers: null,
+        pendingQuestionIndex: questions.length,
         statusMessageId: null,
       },
     });
