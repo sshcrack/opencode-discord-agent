@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { handleCommand } from "./discord/commands";
 import { handleAutocomplete, handleButton } from "./discord/interactions";
 import { createTRPCServer } from "./trpc/server";
+import { checkWorkerOnline } from "./discord/fallback";
 
 const {
   DISCORD_TOKEN,
@@ -34,6 +35,22 @@ const client = new Client({
 client.once(Events.ClientReady, async (c) => {
   console.log(`Logged in as ${c.user.tag}`);
   createTRPCServer(parseInt(TRPC_PORT));
+
+  const updatePresence = async () => {
+    try {
+      const online = await checkWorkerOnline();
+      if (online) {
+        c.user.setPresence({ activities: [{ name: "Worker online" }], status: "online" });
+      } else {
+        c.user.setPresence({ activities: [{ name: "Worker offline" }], status: "idle" });
+      }
+    } catch (err) {
+      console.error("Failed to update presence:", err);
+    }
+  };
+
+  await updatePresence();
+  setInterval(updatePresence, 30_000);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {

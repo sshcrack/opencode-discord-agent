@@ -5,6 +5,8 @@ import { CreateReportCommand } from "./create-report";
 import { SubmitCommand } from "./submit";
 import { SetAutoCommand } from "./set-auto";
 import { SetVerboseCommand } from "./set-verbose";
+import { ClearSessionCommand } from "./clear-session";
+import { UpdateCommand } from "./update";
 
 const commandInstances: Command[] = [
   new RepoCommand(),
@@ -12,6 +14,8 @@ const commandInstances: Command[] = [
   new SubmitCommand(),
   new SetAutoCommand(),
   new SetVerboseCommand(),
+  new ClearSessionCommand(),
+  new UpdateCommand(),
 ];
 
 export const commands = commandInstances.map(c => c.data);
