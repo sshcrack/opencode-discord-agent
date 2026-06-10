@@ -52,7 +52,7 @@ export const JobSchema = z.object({
   prUrl: z.string().nullable(),
   autoMode: z.boolean(),
   pendingSuggestion: z.string().nullable(),
-  planEditToken: z.string().nullable(),
+  planEditToken: z.string().nullish(),
 });
 
 export const PollNextJobInput = z.object({
