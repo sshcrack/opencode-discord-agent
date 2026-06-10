@@ -17,7 +17,7 @@ async function runBuildAgent(
   const prompt = [
     `Follow the plan in PLAN.md exactly to implement the required changes.`,
     issueRef,
-    `When done, commit all changes with a clear message, push the branch, then create a pull request.`,
+    `When done, commit all changes with a clear message, push the branch, then create a pull request. After creating it, output the pull request URL.`,
     `\n\nYou can post messages to the Discord thread by running \`${helperPath} info "your message"\`. You can also rename the thread with \`${helperPath} --rename "new name"\`.`,
   ]
     .filter(Boolean)
@@ -29,7 +29,6 @@ async function runBuildAgent(
     jobLog(jobId, `[DRY RUN] 🔧 Build agent`);
     jobLog(jobId, `[DRY RUN] Prompt: ${prompt}`);
     jobLog(jobId, `[DRY RUN] Would run: opencode run --agent build --print ...`);
-    jobLog(jobId, `[DRY RUN] Would run: gh pr create --title "${branch.replace(/-/g, " ")} implementation" --body ...`);
     await postInfo(jobId, `[DRY RUN] Build agent skipped — prompt logged to worker console`);
     return null;
   }
@@ -41,38 +40,24 @@ async function runBuildAgent(
   ]);
   jobLog(jobId, `Build agent finished in ${(performance.now() - buildStart).toFixed(0)}ms`);
 
-  const prBody = issueNumber
-    ? `Closes #${issueNumber}\n\nImplemented according to PLAN.md.`
-    : "Implemented according to PLAN.md.";
+  const prView = Bun.spawnSync(["gh", "pr", "view", "--json", "url", "--jq", ".url"], {
+    cwd: worktreePath,
+  });
 
-  const prTitle = `${branch.replace(/-/g, " ")} implementation`;
-
-  jobLog(jobId, `Creating PR: gh pr create --title "${prTitle}" --body [${prBody.length} chars]`);
-  const prStart = performance.now();
-  const prProc = Bun.spawn(
-    ["gh", "pr", "create", "--title", prTitle, "--body", prBody],
-    { cwd: worktreePath, stdout: "pipe", stderr: "pipe" },
-  );
-
-  const [prOutput, prErrContent] = await Promise.all([
-    new Response(prProc.stdout).text(),
-    new Response(prProc.stderr).text(),
-  ]);
-  const prExit = await prProc.exited;
-  jobLog(jobId, `gh pr create: exit ${prExit}, output: ${prOutput.trim()} (${(performance.now() - prStart).toFixed(0)}ms)`);
-
-  if (prExit !== 0) {
-    jobLog(jobId, `PR creation stderr: ${prErrContent.slice(0, 400)}`);
+  if (prView.exitCode !== 0) {
+    const stderr = prView.stderr.toString().trim().slice(0, 400);
+    jobLog(jobId, `Failed to get PR URL: ${stderr}`);
     await client.postStatus.mutate({
       jobId,
-      message: `PR creation failed: ${prErrContent.slice(0, 400)}`,
+      message: `Failed to find PR: ${stderr}`,
       level: "error",
     });
     return null;
   }
 
-  jobLog(jobId, `PR URL: ${prOutput.trim()}`);
-  return prOutput.trim();
+  const prUrl = prView.stdout.toString().trim();
+  jobLog(jobId, `PR URL: ${prUrl}`);
+  return prUrl || null;
 }
 
 export { runBuildAgent };

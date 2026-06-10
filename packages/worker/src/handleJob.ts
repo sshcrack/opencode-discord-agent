@@ -191,23 +191,16 @@ async function handleJob(job: Job) {
 
     if (prUrl) {
       jobLog(job.id, `PR created: ${prUrl}`);
-      await client.postStatus.mutate({
-        jobId: job.id,
-        message: `PR created: ${prUrl}`,
-        level: "success",
-      });
-      await client.postStatus.mutate({
-        jobId: job.id,
-        message: "Job complete! 🎉",
-        level: "success",
-      });
-      await client.postStatus.mutate({
-        jobId: job.id,
-        message: `<@${job.reporterId}> your PR is ready!`,
-        level: "info",
+      await client.markComplete.mutate({ jobId: job.id, prUrl }).catch((err) => {
+        jobLog(job.id, `Failed to mark job complete: ${err}`);
       });
     } else {
-      jobLog(job.id, `PR creation failed or returned no URL`);
+      jobLog(job.id, `Build completed but no PR URL found`);
+      await client.postStatus.mutate({
+        jobId: job.id,
+        message: "Build completed but PR URL could not be determined",
+        level: "error",
+      });
     }
 
     stopTyping();
