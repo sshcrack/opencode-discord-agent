@@ -9,108 +9,76 @@ Before substantial work (and after installing trpc):
 <!-- intent-skills:end -->
 
 
-Default to using Bun instead of Node.js.
+## Repo structure
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+Three-package Bun workspace — no frontend, no tests:
 
-## APIs
+| Package | Entrypoint | Role |
+|---------|------------|------|
+| `packages/shared` | `src/index.ts` | Zod schemas, types, tRPC router *definition* (stubs only) |
+| `packages/bot` | `src/index.ts` | Discord client, Prisma/SQLite, tRPC server (handles real router impl) |
+| `packages/worker` | `src/index.ts` | Polls bot via tRPC, runs `gwq`/`opencode`/`gh`, reports status |
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+## Database (bot only)
+
+- **Prisma schema**: `packages/bot/prisma/schema.prisma`
+- **Generated client output**: `packages/bot/src/db/generated/` (set in schema via `output = "../src/db/generated"`)
+- Uses `prisma-client` (v7+ JS API, **not** `prisma-client-js`), `engineType = "client"`, `runtime = "bun"`
+- Worker has **zero** database access — all state through tRPC
+- Schema uses **SQLite** via `@prisma/adapter-libsql`
+
+## Environment setup
+
+```bash
+bun install
+cp .env.example packages/bot/.env
+bun run db:generate    # bunx --bun prisma generate —cwd packages/bot
+bun run db:push        # bunx --bun prisma db push —cwd packages/bot
+```
+
+`packages/bot/.env` needs `DISCORD_TOKEN`, `CLIENT_ID`, `SHARED_SECRET`, `DATABASE_URL`. Worker reads env from shell or its own `.env`.
+
+## Running
+
+```bash
+bun run dev:bot        # bun run --cwd packages/bot dev (watch mode)
+bun run dev:worker     # bun run --cwd packages/worker dev (watch mode)
+```
+
+Worker also requires `SHARED_SECRET` and optionally `WORKER_ID`, `BOT_URL`, `DRY_RUN`.
+
+## Deploying slash commands
+
+```bash
+bun run bot-deploy     # bun run --cwd packages/bot deploy
+```
+
+Requires `CLIENT_ID` env var in addition to `DISCORD_TOKEN`. Deletes guild commands first, then registers globally.
+
+## Typechecking
+
+```bash
+bun run typecheck      # bunx tsc --noEmit -p packages/bot && bunx tsc --noEmit -p packages/worker && bunx tsc --noEmit -p packages/shared
+```
+
+No lint or format scripts exist.
 
 ## Testing
 
-Use `bun test` to run tests.
+No tests exist in this repo — `bun test` finds nothing.
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+## Framework quirks
 
-test("hello world", () => {
-  expect(1).toBe(1);
-});
-```
+- **tRPC router stubs** live in `packages/shared/src/router.ts` but throw "Not implemented" — the real implementation is in `packages/bot/src/trpc/router.ts` using Prisma. Shared package is for type safety between bot and worker only.
+- **Auth**: All tRPC calls authenticated via `Authorization: Bearer <SHARED_SECRET>`. Bot's tRPC server (`packages/bot/src/trpc/server.ts`) verifies on every request.
+- **Prisma v7+**: `prisma-client` generator with engineType `"client"` (no binary engine). Run all prisma commands with `bunx --bun prisma ... --cwd packages/bot`.
+- **Worker doesn't clone repos** — assumes the registered path exists on disk. Uses `gwq` (git worktree manager) to create branches. Requires `gwq`, `opencode`, and `gh` CLI on PATH.
+- **env vars only for secrets/URLs** — models, auto-mode, verbose-mode are all stored in the `Setting` database table, not env.
+- **No `.github/` CI** — infrastructure-less design, runs on dev laptop.
 
-## Frontend
+## Key conventions
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
-
-Server:
-
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
-
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
-
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
-
-With the following `frontend.tsx`:
-
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+- All bot↔worker communication via tRPC (HTTP, bearer token). Worker logs structured `[Worker <id> <timestamp>]` prefix, job logs with `[Job #<id>]`.
+- Status messages use emoji prefixes: ℹ️ info, ✅ success, ❌ error. Verbose mode (default on) controls whether info-level messages post to Discord.
+- Worker is single-tenant — only one job at a time per worker instance.
+- `DRY_RUN=true` env var skips `gwq`/`opencode`/`gh` execution but logs everything.
