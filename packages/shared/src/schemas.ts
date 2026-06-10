@@ -60,6 +60,7 @@ export const JobSchema = z.object({
 
 export const PollNextJobInput = z.object({
   workerId: z.string(),
+  gitHead: z.string(),
 });
 
 export const GetJobStatusInput = z.object({

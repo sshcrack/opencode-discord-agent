@@ -66,6 +66,16 @@ export const appRouter = t.router({
         create: { key: `worker:${input.workerId}:lastSeen`, value: now.toISOString() },
       });
 
+      // Verify worker is on the same git HEAD as the bot
+      const botHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
+      if (botHead && botHead !== "unknown" && input.gitHead !== botHead) {
+        await postToThread(
+          (await prisma.job.findFirst({ where: { status: "pending" }, orderBy: { createdAt: "asc" } }))?.threadId ?? "",
+          `⏳ Worker **${input.workerId}** is outdated (HEAD: ${input.gitHead.slice(0, 12)} ≠ bot: ${botHead.slice(0, 12)}). Waiting for it to update...`,
+        ).catch(() => {});
+        return null;
+      }
+
       // Atomically claim a pending job — the where clause prevents two workers
       // from claiming the same job
       const claimed = await prisma.$transaction(async (tx) => {

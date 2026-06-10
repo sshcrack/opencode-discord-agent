@@ -9,14 +9,44 @@ async function poll(): Promise<void> {
     workerLog(`Skipping poll — job #${getActiveJobId()} still active`);
     return;
   }
+
+  // Check if worker is up-to-date with bot on every poll
+  const localHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
+
+  try {
+    const botHead = await client.getBotHead.query();
+    if (localHead && botHead.sha && botHead.sha !== "unknown" && localHead !== botHead.sha) {
+      workerLog(`Outdated (local: ${localHead.slice(0, 12)}, bot: ${botHead.sha.slice(0, 12)}) — updating...`);
+      runUpdate();
+      return;
+    }
+  } catch {
+    // Can't reach bot — poll anyway
+  }
+
   const start = performance.now();
-  const result = await client.pollNextJob.query({ workerId: WORKER_ID });
+  const result = await client.pollNextJob.query({ workerId: WORKER_ID, gitHead: localHead });
   if (result) {
     const elapsed = (performance.now() - start).toFixed(0);
     workerLog(`Claimed job #${result.id} for repo ${result.repoSlug} (poll took ${elapsed}ms)`);
     setActiveJobId(result.id);
     await handleJob(result);
   }
+}
+
+function runUpdate() {
+  workerLog(`Running update: git pull + bun install`);
+  const pull = Bun.spawnSync(["git", "pull"]);
+  if (pull.exitCode !== 0) {
+    workerLog(`git pull failed: ${pull.stderr.toString().slice(0, 300)}`);
+    return;
+  }
+  const install = Bun.spawnSync(["bun", "install"]);
+  if (install.exitCode !== 0) {
+    workerLog(`bun install failed: ${install.stderr.toString().slice(0, 300)}`);
+  }
+  workerLog(`Update complete — restarting...`);
+  process.exit(0);
 }
 
 async function heartbeat() {
@@ -30,34 +60,17 @@ async function heartbeat() {
 }
 
 async function checkForUpdates() {
-  if (getActiveJobId() !== null) return; // don't update mid-job
+  if (getActiveJobId() !== null) return;
   if (dryRun) return;
 
   try {
     const botHead = await client.getBotHead.query();
-    const localProc = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
-    const localHead = localProc.stdout.toString().trim();
+    const localHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
     if (!localHead || !botHead.sha || botHead.sha === "unknown") return;
-
     if (localHead === botHead.sha) return;
 
-    workerLog(`Git HEAD mismatch: local=${localHead.slice(0, 12)} bot=${botHead.sha.slice(0, 12)} — updating...`);
-
-    const pull = Bun.spawnSync(["git", "pull"]);
-    if (pull.exitCode !== 0) {
-      workerLog(`git pull failed: ${pull.stderr.toString().slice(0, 300)}`);
-      return;
-    }
-
-    workerLog(`git pull OK: ${pull.stdout.toString().slice(0, 200)}`);
-
-    const install = Bun.spawnSync(["bun", "install"]);
-    if (install.exitCode !== 0) {
-      workerLog(`bun install failed: ${install.stderr.toString().slice(0, 300)}`);
-    }
-
-    workerLog(`Update complete — restarting worker...`);
-    process.exit(0);
+    workerLog(`Update check: local=${localHead.slice(0, 12)} bot=${botHead.sha.slice(0, 12)} — updating...`);
+    runUpdate();
   } catch (err) {
     workerLog(`Update check failed: ${err}`);
   }
