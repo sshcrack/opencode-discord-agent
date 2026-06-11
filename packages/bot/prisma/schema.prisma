@@ -33,6 +33,7 @@ model Repository {
   slug      String   @unique
   path      String
   originUrl String?
+  channelId String?
   isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
 }

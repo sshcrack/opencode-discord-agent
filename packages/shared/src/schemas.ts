@@ -26,6 +26,7 @@ export const RepositorySchema = z.object({
   id: z.number(),
   slug: z.string(),
   path: z.string(),
+  channelId: z.string().nullable(),
   isDefault: z.boolean(),
 });
 

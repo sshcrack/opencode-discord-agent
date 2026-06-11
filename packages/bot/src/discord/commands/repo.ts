@@ -2,9 +2,12 @@ import {
   SlashCommandBuilder,
   SlashCommandSubcommandBuilder,
   CommandInteraction,
+  ChannelType,
+  GuildChannel,
 } from "discord.js";
 import { prisma } from "../../db";
 import { Command } from "./Command";
+import { getClient } from "../helpers";
 
 export class RepoCommand extends Command {
   data = new SlashCommandBuilder()
@@ -59,11 +62,37 @@ export class RepoCommand extends Command {
       }
 
       const repoCount = await prisma.repository.count();
+
+      // Create a Discord text channel for the repo
+      let channelId: string | null = null;
+      if (interaction.guild) {
+        try {
+          const guild = await getClient().guilds.fetch(interaction.guild.id);
+          let parentId: string | null = null;
+
+          if (interaction.channel && "parent" in interaction.channel) {
+            const cat = (interaction.channel as any).parent as GuildChannel | null;
+            if (cat) parentId = cat.id;
+          }
+
+          const created = await guild.channels.create({
+            name: slug,
+            type: ChannelType.GuildText,
+            parent: parentId ?? undefined,
+            reason: `Auto-created for repository ${slug}`,
+          });
+          channelId = created.id;
+        } catch (err) {
+          console.warn(`[RepoCommand] Failed to create Discord channel for ${slug}:`, err);
+        }
+      }
+
       const repo = await prisma.repository.create({
-        data: { slug, path, originUrl, isDefault: repoCount === 0 },
+        data: { slug, path, originUrl, channelId, isDefault: repoCount === 0 },
       });
 
       const parts = [`\`${slug}\` added`];
+      if (channelId) parts.push(`channel created: <#${channelId}>`);
       if (repo.isDefault) parts.push("set as default");
       if (!originUrl) parts.push("no origin URL — fallback will be unavailable");
       await interaction.reply(`:white_check_mark: ${parts.join(" — ")}`);
@@ -98,6 +127,18 @@ export class RepoCommand extends Command {
         return;
       }
 
+      // Delete the Discord channel if it exists
+      if (repo.channelId) {
+        try {
+          const channel = await getClient().channels.fetch(repo.channelId);
+          if (channel?.isTextBased() && "delete" in channel) {
+            await (channel as any).delete(`Repository ${slug} removed`);
+          }
+        } catch (err) {
+          console.warn(`[RepoCommand] Failed to delete channel ${repo.channelId}:`, err);
+        }
+      }
+
       await prisma.repository.delete({ where: { slug } });
 
       if (wasDefault) {
@@ -116,7 +157,10 @@ export class RepoCommand extends Command {
         return;
       }
 
-      const lines = repos.map(r => `${r.isDefault ? "⭐ " : ""}**${r.slug}** → \`${r.path}\``);
+      const lines = repos.map(r => {
+        const channelRef = r.channelId ? ` <#${r.channelId}>` : "";
+        return `${r.isDefault ? "⭐ " : ""}**${r.slug}**${channelRef} → \`${r.path}\``;
+      });
       await interaction.reply(`**Registered repositories:**\n${lines.join("\n")}`);
     } else if (subcommand === "set-default") {
       const slug = interaction.options.getString("slug", true);
