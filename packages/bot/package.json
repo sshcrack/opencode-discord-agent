@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "dev": "bun run --watch src/index.ts",
+    "dev": "bun run src/deploy-commands.ts && bun run --watch src/index.ts",
     "deploy": "bun run src/deploy-commands.ts",
     "db:generate": "bunx --bun prisma generate",
     "db:push": "bunx --bun prisma db push",

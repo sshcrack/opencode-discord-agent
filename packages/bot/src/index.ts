@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits, Events, TextChannel, ThreadChannel, ChannelType } from "discord.js";
 import { prisma } from "./db";
+import { registerCommands } from "./deploy-commands";
 import { handleCommand } from "./discord/commands";
 import { handleAutocomplete, handleButton } from "./discord/interactions";
 import { recordAnswer, cancelQuestions } from "./discord/questions";
@@ -35,6 +36,15 @@ const client = new Client({
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`Logged in as ${c.user.tag}`);
+
+  // Register slash commands with Discord on every startup
+  try {
+    await registerCommands();
+    console.log("[Startup] Slash commands registered");
+  } catch (err) {
+    console.error("[Startup] Failed to register slash commands:", err);
+  }
+
   createTRPCServer(parseInt(TRPC_PORT));
 
   // Post "Done." to the channel that triggered /update
