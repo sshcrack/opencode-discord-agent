@@ -247,8 +247,6 @@ if (cmd === "ask") {
   Bun.spawnSync(["rm", "-f", helperPath]);
 }
 
-const ANSWER_TIMEOUT_MS = 15 * 60 * 1000;
-
 function formatQaBlock(
   questions: { q: string; options: string[]; recommended: number }[],
   answers: { q: string; a: string }[],
@@ -268,12 +266,10 @@ async function pollAndInjectAnswers(
   const initial = await client.getJobStatus.query({ jobId, workerId: WORKER_ID }).catch(() => null);
   if (!initial || !initial.pendingQuestions) return null;
 
-  jobLog(jobId, `Agent asked questions, waiting for answers (timeout: ${ANSWER_TIMEOUT_MS / 60000}min)...`);
+  jobLog(jobId, `Agent asked questions, waiting for answers (no timeout)...`);
   await postInfo(jobId, "ℹ️ Agent has questions — please answer them in this thread");
 
-  const deadline = Date.now() + ANSWER_TIMEOUT_MS;
-
-  while (Date.now() < deadline) {
+  while (true) {
     await Bun.sleep(3000);
     const status = await client.getJobStatus.query({ jobId, workerId: WORKER_ID }).catch(() => null);
     if (!status) continue;
@@ -303,10 +299,6 @@ async function pollAndInjectAnswers(
       }
     }
   }
-
-  jobLog(jobId, `Timeout waiting for answers, proceeding without`);
-  await postInfo(jobId, "⏰ Timeout waiting for answers — proceeding with current plan");
-  return null;
 }
 
 export { handleJob };
