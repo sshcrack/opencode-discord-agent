@@ -1,6 +1,7 @@
 import { BOT_URL, SHARED_SECRET, WORKER_ID, dryRun } from "./env";
 import { client, postInfo, postDebug } from "./trpc";
 import type { Job } from "./trpc";
+import path from "node:path";
 
 import { jobLog } from "./logging";
 import { createWorktree, createFollowupWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
@@ -8,6 +9,7 @@ import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
 import { waitForApproval } from "./approval";
 import { runBuildAgent } from "./build";
+import { runOpencodeStreaming } from "./opencode";
 
 async function handleJob(job: Job) {
   const repoPath = job.repoPath;
@@ -114,16 +116,7 @@ const cmd = process.argv[2];
 if (cmd === "ask") {
   const questions = JSON.parse(process.argv.slice(3).join(" "));
   await trpc("askQuestion", { jobId: JOB_ID, questions });
-  console.error("[ Waiting for answers in Discord thread... ]");
-  while (true) {
-    await new Promise(r => setTimeout(r, 3000));
-    const res = await trpc("pollAnswer", { jobId: JOB_ID });
-    const d = res?.result?.data;
-    if (d?.answered && d?.formatted) {
-      console.log(d.formatted);
-      break;
-    }
-  }
+  console.log(JSON.stringify({ type: "questions_posted", count: questions.length }));
 } else if (cmd === "--rename") {
   await trpc("renameJobThread", { jobId: JOB_ID, name: process.argv[3] });
 } else {
@@ -200,8 +193,22 @@ if (cmd === "ask") {
       await postInfo(job.id, "Planning started — running opencode plan agent...");
 
       const planStart = performance.now();
-      const { planMd, sessionId } = await runPlanAgent(job, worktreePath, issueNumber, helperPath);
+      let { planMd, sessionId } = await runPlanAgent(job, worktreePath, issueNumber, helperPath);
       jobLog(job.id, `Plan agent completed in ${(performance.now() - planStart).toFixed(0)}ms, session: ${sessionId}, plan length: ${planMd.length} chars`);
+
+      // Check if the agent asked questions — if so, wait for answers and inject them
+      if (!job.autoMode && sessionId) {
+        const planDir = path.join(worktreePath, ".opencode", "plans");
+        const planFileName = `plan-${job.id}-${job.repoSlug.replace(/[^a-zA-Z0-9]/g, "-")}.md`;
+        const planFilePath = path.join(planDir, planFileName);
+
+        const injected = await pollAndInjectAnswers(job.id, sessionId, worktreePath, planFilePath);
+        if (injected) {
+          planMd = injected.planMd;
+          sessionId = injected.sessionId;
+          jobLog(job.id, `Answers injected, revised plan length: ${planMd.length} chars`);
+        }
+      }
 
       await postInfo(job.id, "Planning complete, posting plan for review...");
 
@@ -289,6 +296,60 @@ if (cmd === "ask") {
   const totalElapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
   jobLog(job.id, `Job finished in ${totalElapsed}s`);
   Bun.spawnSync(["rm", "-f", helperPath]);
+}
+
+function formatQaBlock(
+  questions: { q: string; options: string[]; recommended: number }[],
+  answers: { q: string; a: string }[],
+): string {
+  return questions.map((q, i) => {
+    const a = answers[i]?.a ?? "(unanswered)";
+    return `Q: ${q.q}\nA: ${a}`;
+  }).join("\n\n");
+}
+
+async function pollAndInjectAnswers(
+  jobId: number,
+  sessionId: string,
+  worktreePath: string,
+  planFilePath: string,
+): Promise<{ planMd: string; sessionId: string } | null> {
+  const initial = await client.getJobStatus.query({ jobId, workerId: WORKER_ID }).catch(() => null);
+  if (!initial || !initial.pendingQuestions) return null;
+
+  jobLog(jobId, `Agent asked questions, waiting for answers (no timeout)...`);
+  await postInfo(jobId, "ℹ️ Agent has questions — please answer them in this thread");
+
+  while (true) {
+    await Bun.sleep(3000);
+    const status = await client.getJobStatus.query({ jobId, workerId: WORKER_ID }).catch(() => null);
+    if (!status) continue;
+
+    if (status.pendingQuestions && status.pendingAnswers) {
+      const questions = JSON.parse(status.pendingQuestions);
+      const answers = JSON.parse(status.pendingAnswers);
+      if (answers.length >= questions.length) {
+        const qaBlock = formatQaBlock(questions, answers);
+        jobLog(jobId, `Answers received, injecting into session ${sessionId}`);
+        await postInfo(jobId, "✅ Answers received, revising plan...");
+
+        const result = await runOpencodeStreaming(
+          jobId,
+          worktreePath,
+          planFilePath,
+          [
+            "opencode", "run",
+            "--agent", "plan",
+            "--session", sessionId,
+            "--continue",
+            "--dir", worktreePath,
+            `The user answered your questions:\n${qaBlock}\n\nConsider their input and finalize the plan accordingly.`,
+          ],
+        );
+        return { planMd: result.planMd, sessionId: result.sessionId || sessionId };
+      }
+    }
+  }
 }
 
 export { handleJob };

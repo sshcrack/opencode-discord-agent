@@ -22,6 +22,7 @@ async function runOpencodeStreaming(
   let sessionId = "";
   let lineCount = 0;
   let buffer = "";
+  const textParts: string[] = [];
 
   const reader = proc.stdout.getReader();
   const decoder = new TextDecoder();
@@ -60,6 +61,10 @@ async function runOpencodeStreaming(
           await client.postStatus
             .mutate({ jobId, message: result.message, level: result.level, append: result.append })
             .catch(() => {});
+        }
+
+        if (event.type === "text" && event.part?.text?.trim()) {
+          textParts.push(event.part.text.trim());
         }
       }
     }
@@ -105,6 +110,10 @@ async function runOpencodeStreaming(
     } else {
       jobLog(jobId, `Plan file not found at ${planFilePath}`);
     }
+  }
+  if (!planMd && textParts.length > 0) {
+    jobLog(jobId, `Plan file missing/empty, using ${textParts.length} text parts as fallback`);
+    planMd = textParts.join("\n\n");
   }
 
   if (!sessionId) {

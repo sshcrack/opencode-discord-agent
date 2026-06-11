@@ -16,11 +16,13 @@ async function runPlanAgent(
     ? `\n\nThe following is the Discord report thread context with file attachments:\n${job.context}`
     : "";
 
-  const planDir = path.join(job.repoPath, ".opencode", "plans");
+  const planDir = path.join(worktreePath, ".opencode", "plans");
   const planFileName = `plan-${job.id}-${job.repoSlug.replace(/[^a-zA-Z0-9]/g, "-")}.md`;
   const planFilePath = path.join(planDir, planFileName);
 
-  const askBlock = job.autoMode ? "" : `\n\nYou can ask questions and wait for answers using:
+  const writeInstruction = `Write the plan to \`${planFilePath}\` (create the directory if it doesn't exist).`;
+
+  const askBlock = job.autoMode ? "" : `\n\nIf you have questions, invoke the following script and then STOP — do NOT write the plan yet. Your questions and the answers will be provided in the next prompt, and you will continue from there:
 \`${helperPath} ask '...json...'\`
 
 The \`ask\` command takes a JSON array argument. Each object has:
@@ -35,14 +37,7 @@ Examples:
   # Multiple questions (answered one at a time in Discord):
   ${helperPath} ask '[{"q":"Color?","options":["Red","Blue"],"recommended":0},{"q":"Size?","options":["S","M","L"],"recommended":1}]'
 
-The script blocks until all questions are answered. The output is:
-  Q: Color?
-  A: Red
-
-  Q: Size?
-  A: Large
-
-Always provide options + a recommended answer.`;
+If you do NOT have questions, ${writeInstruction.toLowerCase()} Always provide options + a recommended answer.`;
 
   const helperBlock = `\n\nYou can post messages to the Discord thread and rename it by running:
   \`${helperPath} info "message"\` — info level
@@ -54,7 +49,7 @@ Always provide options + a recommended answer.`;
     `Review the codebase and write a detailed implementation plan.`,
     `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
     `The plan should cover: files to change, approach, and any risk areas.`,
-    `Write the plan to \`${planFilePath}\` (create the directory if it doesn't exist).`,
+    job.autoMode ? writeInstruction : "",
     contextBlock,
     helperBlock,
   ].filter(Boolean).join(" ");
