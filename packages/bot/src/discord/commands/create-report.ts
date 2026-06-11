@@ -100,11 +100,25 @@ export class CreateReportCommand extends Command {
     const ts = Date.now().toString(36);
     const threadName = `${kind}-${ts}`;
 
-    const channel = interaction.channel as TextChannel;
+    let channel: TextChannel;
+    if (repo.channelId) {
+      const fetched = await interaction.client.channels.fetch(repo.channelId);
+      if (!fetched?.isTextBased() || fetched.isThread()) {
+        await interaction.reply({
+          content: `:x: Repository channel for \`${slug}\` is not available`,
+          ephemeral: true,
+        });
+        return;
+      }
+      channel = fetched as TextChannel;
+    } else {
+      channel = interaction.channel as TextChannel;
+    }
+
     const thread = await channel.threads.create({
       name: threadName,
       type: ChannelType.PrivateThread,
-      reason: `New ${kind} report`,
+      reason: `New ${kind} report for ${slug}`,
     });
 
     await prisma.reportThread.create({
