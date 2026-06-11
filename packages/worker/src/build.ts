@@ -1,15 +1,17 @@
 import { dryRun } from "./env";
 import { client, postInfo } from "./trpc";
+import type { Job } from "./trpc";
 import { jobLog } from "./logging";
 import { runOpencodeStreaming } from "./opencode";
 
 async function runBuildAgent(
-  jobId: number,
+  job: Job,
   worktreePath: string,
   issueNumber: number | null,
   branch: string,
   helperPath: string,
   autoMode: boolean,
+  quickMode: boolean,
 ): Promise<string | null> {
   const issueRef = issueNumber
     ? `The related GitHub issue is #${issueNumber} — make sure the PR body contains "Closes #${issueNumber}".`
@@ -39,36 +41,55 @@ The script blocks until all questions are answered. The output is:
 
 Always provide options + a recommended answer.`;
 
-  const prompt = [
-    `Follow the plan in PLAN.md exactly to implement the required changes.`,
-    issueRef,
-    `When done, commit all changes with a clear message, push the branch, then create a pull request. After creating it, output the pull request URL.`,
-    `\n\nYou can post messages to the Discord thread and rename it by running:
+  const helperBlock = `\n\nYou can post messages to the Discord thread and rename it by running:
   \`${helperPath} info "message"\` — info level
   \`${helperPath} success "message"\` — success message
   \`${helperPath} error "message"\` — error message
-  \`${helperPath} --rename "new name"\` — rename thread`,
-    askBlock,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  \`${helperPath} --rename "new name"\` — rename thread`;
 
-  jobLog(jobId, `Build prompt: ${prompt.length} chars, issueRef: ${!!issueNumber}`);
+  let prompt: string;
+
+  if (quickMode) {
+    const contextBlock = job.context
+      ? `\n\nThe following is the Discord report thread context with file attachments:\n${job.context}`
+      : "";
+    prompt = [
+      `You are building an implementation for repository ${job.repoSlug}.`,
+      issueRef,
+      contextBlock,
+      `Review the context and issue above carefully, then implement the required changes.`,
+      `When done, commit all changes with a clear message referencing the issue,`,
+      `push the branch, then create a pull request. After creating it,`,
+      `output the pull request URL.`,
+      helperBlock,
+      askBlock,
+    ].filter(Boolean).join(" ");
+  } else {
+    prompt = [
+      `Follow the plan in PLAN.md exactly to implement the required changes.`,
+      issueRef,
+      `When done, commit all changes with a clear message, push the branch, then create a pull request. After creating it, output the pull request URL.`,
+      helperBlock,
+      askBlock,
+    ].filter(Boolean).join(" ");
+  }
+
+  jobLog(job.id, `Build prompt: ${prompt.length} chars, issueRef: ${!!issueNumber}, quickMode: ${quickMode}`);
 
   if (dryRun) {
-    jobLog(jobId, `[DRY RUN] 🔧 Build agent`);
-    jobLog(jobId, `[DRY RUN] Prompt: ${prompt}`);
-    jobLog(jobId, `[DRY RUN] Would run: opencode run --agent build --print ...`);
-    await postInfo(jobId, `[DRY RUN] Build agent skipped — prompt logged to worker console`);
+    jobLog(job.id, `[DRY RUN] 🔧 Build agent`);
+    jobLog(job.id, `[DRY RUN] Prompt: ${prompt}`);
+    jobLog(job.id, `[DRY RUN] Would run: opencode run --agent build --print ...`);
+    await postInfo(job.id, `[DRY RUN] Build agent skipped — prompt logged to worker console`);
     return null;
   }
 
-  jobLog(jobId, `Starting opencode build agent in ${worktreePath}`);
+  jobLog(job.id, `Starting opencode build agent in ${worktreePath}`);
   const buildStart = performance.now();
-  await runOpencodeStreaming(jobId, worktreePath, [
+  await runOpencodeStreaming(job.id, worktreePath, [
     "opencode", "run", "--agent", "build", "--dir", worktreePath, prompt,
   ]);
-  jobLog(jobId, `Build agent finished in ${(performance.now() - buildStart).toFixed(0)}ms`);
+  jobLog(job.id, `Build agent finished in ${(performance.now() - buildStart).toFixed(0)}ms`);
 
   const prView = Bun.spawnSync(["gh", "pr", "view", "--json", "url", "--jq", ".url"], {
     cwd: worktreePath,
@@ -76,9 +97,9 @@ Always provide options + a recommended answer.`;
 
   if (prView.exitCode !== 0) {
     const stderr = prView.stderr.toString().trim().slice(0, 400);
-    jobLog(jobId, `Failed to get PR URL: ${stderr}`);
+    jobLog(job.id, `Failed to get PR URL: ${stderr}`);
     await client.postStatus.mutate({
-      jobId,
+      jobId: job.id,
       message: `Failed to find PR: ${stderr}`,
       level: "error",
     });
@@ -86,7 +107,7 @@ Always provide options + a recommended answer.`;
   }
 
   const prUrl = prView.stdout.toString().trim();
-  jobLog(jobId, `PR URL: ${prUrl}`);
+  jobLog(job.id, `PR URL: ${prUrl}`);
   return prUrl || null;
 }
 
