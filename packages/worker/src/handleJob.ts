@@ -160,7 +160,7 @@ if (cmd === "ask") {
 
       // Check if the agent asked questions — if so, wait for answers and inject them
       if (!job.autoMode && sessionId) {
-        const planDir = path.join(job.repoPath, ".opencode", "plans");
+        const planDir = path.join(worktreePath, ".opencode", "plans");
         const planFileName = `plan-${job.id}-${job.repoSlug.replace(/[^a-zA-Z0-9]/g, "-")}.md`;
         const planFilePath = path.join(planDir, planFileName);
 

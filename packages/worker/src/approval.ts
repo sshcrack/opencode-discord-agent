@@ -63,7 +63,7 @@ async function waitForApproval(
       let newPlan: string;
       let newSession: string;
 
-      const planDir = path.join(job.repoPath, ".opencode", "plans");
+      const planDir = path.join(worktreePath, ".opencode", "plans");
       const planFileName = `plan-${jobId}-${job.repoSlug.replace(/[^a-zA-Z0-9]/g, "-")}.md`;
       const planFilePath = path.join(planDir, planFileName);
 
