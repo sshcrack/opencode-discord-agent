@@ -31,7 +31,7 @@ function formatQaBlock(questions: Question[], answers: QaPair[]): string {
     .join("\n\n");
 }
 
-async function showNextQuestion(threadId: string, jobId: number, questions: Question[], index: number) {
+async function showNextQuestion(threadId: string, jobId: number, questions: Question[], index: number, reporterId?: string | null) {
   const question = questions[index];
   if (!question) return;
   const total = questions.length;
@@ -89,6 +89,10 @@ async function showNextQuestion(threadId: string, jobId: number, questions: Ques
   const channel = await getClient().channels.fetch(threadId);
   if (!channel?.isTextBased()) return;
 
+  if (reporterId) {
+    await (channel as TextishChannel).send({ content: `<@${reporterId}>` });
+  }
+
   const msg = await (channel as TextishChannel).send({ embeds: [embed], components: rows });
 
   await prisma.job.update({
@@ -133,7 +137,8 @@ async function recordAnswer(jobId: number, answer: string) {
       },
     });
     const label = questions.length > 1 ? `${questions.length} questions` : "1 question";
-    await postToThread(job.threadId, `✅ All ${label} answered.`);
+    const mention = job.reporterId ? `<@${job.reporterId}> ` : "";
+    await postToThread(job.threadId, `${mention}✅ All ${label} answered.`);
     return;
   }
 
@@ -145,7 +150,7 @@ async function recordAnswer(jobId: number, answer: string) {
     },
   });
 
-  await showNextQuestion(job.threadId, jobId, questions, nextIdx);
+  await showNextQuestion(job.threadId, jobId, questions, nextIdx, job.reporterId);
 }
 
 async function cancelQuestions(jobId: number) {
@@ -174,7 +179,8 @@ async function cancelQuestions(jobId: number) {
     },
   });
 
-  await postToThread(job.threadId, "❌ Question flow cancelled.");
+  const cancelMention = job.reporterId ? `<@${job.reporterId}> ` : "";
+  await postToThread(job.threadId, `${cancelMention}❌ Question flow cancelled.`);
 }
 
 export { showNextQuestion, recordAnswer, cancelQuestions, formatQaBlock };
