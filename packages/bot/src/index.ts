@@ -112,6 +112,63 @@ client.once(Events.ClientReady, async (c) => {
 
   await updatePresence();
   setInterval(updatePresence, 30_000);
+
+  // ── Stale-job recovery: every 60s, release jobs from dead workers ──────
+  setInterval(async () => {
+    try {
+      const staleJobs = await prisma.job.findMany({
+        where: {
+          status: { in: ["claimed", "planning", "plan_ready", "approved", "building"] },
+          workerId: { not: null },
+        },
+      });
+
+      const now = Date.now();
+      const workerIds = [...new Set(staleJobs.map(j => j.workerId!))];
+
+      // Batch-fetch all relevant worker lastSeen settings
+      const settings = await prisma.setting.findMany({
+        where: {
+          key: { in: workerIds.map(id => `worker:${id}:lastSeen`) },
+        },
+      });
+      const lastSeenMap = new Map(
+        settings.map(s => [s.key.replace(/^worker:/, "").replace(/:lastSeen$/, ""), new Date(s.value).getTime()]),
+      );
+
+      const staleWorkerIds = workerIds.filter(id => {
+        const lastSeen = lastSeenMap.get(id);
+        return !lastSeen || (now - lastSeen > 120_000); // 2 min without heartbeat
+      });
+
+      if (staleWorkerIds.length > 0) {
+        const result = await prisma.job.updateMany({
+          where: {
+            workerId: { in: staleWorkerIds },
+            status: { in: ["claimed", "planning", "plan_ready", "approved", "building"] },
+          },
+          data: {
+            status: "pending",
+            workerId: null,
+            planMd: null,
+            opencodeSessionId: null,
+            buildSessionId: null,
+            pendingSuggestion: null,
+            planEditToken: null,
+            pendingQuestions: null,
+            pendingQuestionIndex: null,
+            pendingAnswers: null,
+            statusMessageId: null,
+          },
+        });
+        if (result.count > 0) {
+          console.log(`[Stale-job sweep] Released ${result.count} job(s) from dead workers: ${staleWorkerIds.join(", ")}`);
+        }
+      }
+    } catch (err) {
+      console.error("[Stale-job sweep] Error:", err);
+    }
+  }, 60_000);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -203,6 +260,20 @@ client.on(Events.MessageCreate, async (message) => {
 
     await recordAnswer(job.id, message.content);
   } catch { /* ignore */ }
+});
+
+process.on("SIGTERM", async () => {
+  console.log("[SIGTERM] Shutting down gracefully...");
+  const { gracefulShutdown } = await import("./trpc/server");
+  await gracefulShutdown();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  console.log("[SIGINT] Shutting down gracefully...");
+  const { gracefulShutdown } = await import("./trpc/server");
+  await gracefulShutdown();
+  process.exit(0);
 });
 
 client.login(DISCORD_TOKEN);

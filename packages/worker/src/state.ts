@@ -1,4 +1,6 @@
 import { client } from "./trpc";
+import { WORKER_ID } from "./env";
+import { workerLog } from "./logging";
 
 interface JobContext {
   jobId: number;
@@ -28,4 +30,24 @@ function isEmpty(): boolean {
   return jobs.size === 0;
 }
 
-export { registerJob, unregisterJob, isEmpty };
+async function releaseAllJobs(): Promise<number> {
+  const ids = [...jobs.keys()];
+  if (ids.length === 0) return 0;
+
+  workerLog(`Releasing ${ids.length} active job(s) before shutdown...`);
+
+  for (const id of ids) {
+    unregisterJob(id);
+  }
+
+  try {
+    const result = await client.releaseWorkerJobs.mutate({ workerId: WORKER_ID });
+    workerLog(`Released ${result.released} job(s) via tRPC`);
+    return result.released;
+  } catch (err) {
+    workerLog(`Failed to release jobs: ${err} (bot may be down — stale-job sweep will handle)`);
+    return 0;
+  }
+}
+
+export { registerJob, unregisterJob, isEmpty, releaseAllJobs };

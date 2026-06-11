@@ -21,7 +21,10 @@ async function poll(): Promise<void> {
   }
 }
 
-function runUpdate() {
+async function runUpdate() {
+  const { releaseAllJobs } = await import("./state");
+  await releaseAllJobs(); // defensive — usually no-op
+
   workerLog(`Running update: git pull + bun install`);
   const pull = Bun.spawnSync(["git", "pull"]);
   if (pull.exitCode !== 0) {

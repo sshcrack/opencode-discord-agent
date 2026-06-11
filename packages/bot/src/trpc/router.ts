@@ -21,6 +21,8 @@ import {
   PollAnswerOutput,
   GetBotHeadOutput,
   PollNextJobOutput,
+  ReleaseWorkerJobsInput,
+  ReleaseWorkerJobsOutput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
 import { postToThread, renameThread, closeThread, getClient } from "../discord/helpers";
@@ -349,6 +351,32 @@ export const appRouter = t.router({
     .query(async () => {
       const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
       return { sha: proc.stdout.toString().trim() || "unknown" };
+    }),
+
+  releaseWorkerJobs: t.procedure
+    .input(ReleaseWorkerJobsInput)
+    .output(ReleaseWorkerJobsOutput)
+    .mutation(async ({ input }) => {
+      const result = await prisma.job.updateMany({
+        where: {
+          workerId: input.workerId,
+          status: { in: ["claimed", "planning", "plan_ready", "approved", "building"] },
+        },
+        data: {
+          status: "pending",
+          workerId: null,
+          planMd: null,
+          opencodeSessionId: null,
+          buildSessionId: null,
+          pendingSuggestion: null,
+          planEditToken: null,
+          pendingQuestions: null,
+          pendingQuestionIndex: null,
+          pendingAnswers: null,
+          statusMessageId: null,
+        },
+      });
+      return { released: result.count };
     }),
 });
 

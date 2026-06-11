@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, CommandInteraction } from "discord.js";
 import { Command } from "./Command";
 import { prisma } from "../../db";
-import { stopTRPCServer } from "../../trpc/server";
+import { gracefulShutdown } from "../../trpc/server";
 
 export class UpdateCommand extends Command {
   data = new SlashCommandBuilder()
@@ -35,8 +35,7 @@ export class UpdateCommand extends Command {
     });
 
     // ── Update bot ────────────────────────────────────────────────────────
-    stopTRPCServer();
-    await prisma.$disconnect();
+    await gracefulShutdown();
 
     const botDir = `${gitRoot}/packages/bot`;
     const migrate = Bun.spawnSync(["bun", "--bun", "prisma", "migrate", "deploy"], { cwd: botDir });
