@@ -70,38 +70,28 @@ export const appRouter = t.router({
       // Verify worker is on the same git HEAD as the bot
       const botHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
       if (botHead && botHead !== "unknown" && input.gitHead !== botHead) {
-        return { job: null, gitMismatch: true };
+        return { jobs: [], gitMismatch: true };
       }
 
-      // Atomically claim a pending job — the where clause prevents two workers
-      // from claiming the same job
-      const claimed = await prisma.$transaction(async (tx) => {
-        const job = await tx.job.findFirst({
-          where: { status: "pending" },
-          orderBy: { createdAt: "asc" },
-        });
-        if (!job) return null;
-
-        const repo = await tx.repository.findUnique({ where: { slug: job.repoSlug } });
-
-        return tx.job.update({
-          where: { id: job.id, status: "pending" },
-          data: {
-            status: "claimed",
-            workerId: input.workerId,
-            repoPath: repo?.path ?? "",
-          },
-        });
+      const pending = await prisma.job.findMany({
+        where: { status: "pending" },
+        orderBy: { createdAt: "asc" },
       });
 
-      if (!claimed) return { job: null, gitMismatch: false };
+      const claimed = [];
+      for (const job of pending) {
+        const repo = await prisma.repository.findUnique({ where: { slug: job.repoSlug } });
+        const updated = await prisma.job.update({
+          where: { id: job.id, status: "pending" },
+          data: { status: "claimed", workerId: input.workerId, repoPath: repo?.path ?? "" },
+        });
+        if (updated) {
+          claimed.push(toJobOutput(updated));
+          await postToThread(updated.threadId, `ℹ️ Worker **${input.workerId}** picked up the job`);
+        }
+      }
 
-      await postToThread(
-        claimed.threadId,
-        `ℹ️ Worker **${input.workerId}** picked up the job`,
-      );
-
-      return { job: toJobOutput(claimed), gitMismatch: false };
+      return { jobs: claimed, gitMismatch: false };
     }),
 
   getJobStatus: t.procedure

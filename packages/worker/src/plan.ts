@@ -1,3 +1,4 @@
+import path from "node:path";
 import { dryRun } from "./env";
 import { postInfo } from "./trpc";
 import type { Job } from "./trpc";
@@ -14,6 +15,11 @@ async function runPlanAgent(
   const contextBlock = job.context
     ? `\n\nThe following is the Discord report thread context with file attachments:\n${job.context}`
     : "";
+
+  const planDir = path.join(job.repoPath, ".opencode", "plans");
+  const planFileName = `plan-${job.id}-${job.repoSlug.replace(/[^a-zA-Z0-9]/g, "-")}.md`;
+  const planFilePath = path.join(planDir, planFileName);
+
   const askBlock = job.autoMode ? "" : `\n\nYou can ask questions and wait for answers using:
 \`${helperPath} ask '...json...'\`
 
@@ -48,7 +54,7 @@ Always provide options + a recommended answer.`;
     `Review the codebase and write a detailed implementation plan.`,
     `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
     `The plan should cover: files to change, approach, and any risk areas.`,
-    `After saving the plan file, report the exact path where it was saved by writing a single line at the end of your response in this exact format: PLAN_PATH:/path/to/your/plan.md`,
+    `Write the plan to \`${planFilePath}\` (create the directory if it doesn't exist).`,
     contextBlock,
     helperBlock,
   ].filter(Boolean).join(" ");
@@ -64,7 +70,7 @@ Always provide options + a recommended answer.`;
   }
 
   jobLog(job.id, `Starting opencode plan agent in ${worktreePath}`);
-  return runOpencodeStreaming(job.id, worktreePath, ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt]);
+  return runOpencodeStreaming(job.id, worktreePath, planFilePath, ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt]);
 }
 
 export { runPlanAgent };

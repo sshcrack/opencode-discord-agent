@@ -126,12 +126,4 @@ function handleJsonEvent(event: any, jobId: number, cwd: string): EventResult {
   }
 }
 
-function extractPlanPath(text: string): string | null {
-  const match = text.match(/PLAN_PATH:(.+)/);
-  if (match?.[1]) return match[1].trim();
-  const altMatch = text.match(/The plan has been written to (.+)/);
-  if (altMatch?.[1]) return altMatch[1].trim();
-  return null;
-}
-
-export { type EventResult, handleJsonEvent, extractPlanPath };
+export { type EventResult, handleJsonEvent };

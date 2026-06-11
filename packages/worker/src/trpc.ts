@@ -29,7 +29,7 @@ async function getIssueModel(): Promise<string> {
 }
 
 type PollNextJobOutput = Awaited<ReturnType<typeof client.pollNextJob.query>>;
-type Job = NonNullable<PollNextJobOutput['job']>;
+type Job = PollNextJobOutput['jobs'][number];
 
 export { client, postDebug, postInfo, getIssueModel };
 export type { Job };

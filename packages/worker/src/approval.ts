@@ -1,3 +1,4 @@
+import path from "node:path";
 import { WORKER_ID } from "./env";
 import { client, postInfo, postDebug } from "./trpc";
 import type { Job } from "./trpc";
@@ -62,11 +63,16 @@ async function waitForApproval(
       let newPlan: string;
       let newSession: string;
 
+      const planDir = path.join(job.repoPath, ".opencode", "plans");
+      const planFileName = `plan-${jobId}-${job.repoSlug.replace(/[^a-zA-Z0-9]/g, "-")}.md`;
+      const planFilePath = path.join(planDir, planFileName);
+
       if (currentSession) {
         jobLog(jobId, `Resuming opencode session ${currentSession} with suggestion`);
         const result = await runOpencodeStreaming(
           jobId,
           worktreePath,
+          planFilePath,
           [
             "opencode", "run",
             "--agent", "plan",
@@ -88,7 +94,7 @@ async function waitForApproval(
           `Review the codebase and write a detailed implementation plan based on this suggestion: "${suggestion}".`,
           `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
           `The plan should cover: files to change, approach, and any risk areas.`,
-          `Write the plan to \`$HOME/.local/share/opencode/plans/\` (create the directory if it doesn't exist). After saving, report the exact path by writing a single line at the end of your response in this exact format: PLAN_PATH:/path/to/your/plan.md`,
+          `Write the plan to \`${planFilePath}\` (create the directory if it doesn't exist).`,
           current.context ? `\n\nDiscord report context:\n${current.context}` : "",
           `\n\nYou can post messages to the Discord thread and rename it by running:
   \`${helperPath} info "message"\` — info
@@ -108,6 +114,7 @@ async function waitForApproval(
         const result = await runOpencodeStreaming(
           jobId,
           worktreePath,
+          planFilePath,
           ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt],
         );
         newPlan = result.planMd;
