@@ -23,7 +23,7 @@ import {
   PollNextJobOutput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread, renameThread, getClient } from "../discord/helpers";
+import { postToThread, renameThread, closeThread, getClient } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
 import { showNextQuestion, recordAnswer, formatQaBlock } from "../discord/questions";
 import type { Job } from "../db/generated/client";
@@ -45,6 +45,7 @@ function toJobOutput(job: Job) {
     issueNumber: job.issueNumber,
     prUrl: job.prUrl,
     autoMode: job.autoMode,
+    quickMode: job.quickMode,
     pendingSuggestion: job.pendingSuggestion,
     planEditToken: job.planEditToken ?? null,
     pendingQuestions: job.pendingQuestions ?? null,
@@ -296,6 +297,7 @@ export const appRouter = t.router({
 
       await postToThread(job.threadId, `✅ PR created: ${input.prUrl}`);
       await postToThread(job.threadId, `✅ Job complete! <@${job.reporterId}> your PR is ready!`);
+      await closeThread(job.threadId);
 
       return { success: true };
     }),

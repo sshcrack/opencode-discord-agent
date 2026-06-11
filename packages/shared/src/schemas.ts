@@ -52,6 +52,7 @@ export const JobSchema = z.object({
   issueNumber: z.number().nullable(),
   prUrl: z.string().nullable(),
   autoMode: z.boolean(),
+  quickMode: z.boolean(),
   pendingSuggestion: z.string().nullable(),
   planEditToken: z.string().nullish(),
   pendingQuestions: z.string().nullable(),
@@ -121,6 +122,7 @@ export const SetDefaultRepoInput = z.object({
 export const SubmitJobInput = z.object({
   threadId: z.string(),
   auto: z.boolean().optional(),
+  quick: z.boolean().optional(),
 });
 
 export const StatusResult = z.object({

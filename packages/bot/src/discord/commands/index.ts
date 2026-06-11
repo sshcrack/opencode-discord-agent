@@ -6,6 +6,7 @@ import { SubmitCommand } from "./submit";
 import { SetAutoCommand } from "./set-auto";
 import { SetVerboseCommand } from "./set-verbose";
 import { ClearSessionCommand } from "./clear-session";
+import { SetQuickCommand } from "./set-quick";
 import { UpdateCommand } from "./update";
 
 const commandInstances: Command[] = [
@@ -13,6 +14,7 @@ const commandInstances: Command[] = [
   new CreateReportCommand(),
   new SubmitCommand(),
   new SetAutoCommand(),
+  new SetQuickCommand(),
   new SetVerboseCommand(),
   new ClearSessionCommand(),
   new UpdateCommand(),
