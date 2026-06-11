@@ -17,6 +17,18 @@ export async function postToThread(threadId: string, content: string) {
   }
 }
 
+export async function closeThread(threadId: string) {
+  try {
+    const channel = await getClient().channels.fetch(threadId);
+    if (channel?.isThread()) {
+      await channel.setLocked(true);
+      await channel.setArchived(true);
+    }
+  } catch (err) {
+    console.error(`Failed to close thread ${threadId}:`, err);
+  }
+}
+
 export async function renameThread(threadId: string, name: string) {
   try {
     const channel = await getClient().channels.fetch(threadId);

@@ -154,51 +154,57 @@ if (cmd === "ask") {
       }
     }
 
-    // ── Step 3: Plan agent ─────────────────────────────────────────────────
-    jobLog(job.id, "Step 3/5: Running plan agent...");
-    await postInfo(job.id, "Planning started — running opencode plan agent...");
+    // ── Step 3: Plan agent + Step 4: Approval (skip in quick mode) ─────────
+    let finalSessionId: string | null | undefined;
 
-    const planStart = performance.now();
-    const { planMd, sessionId } = await runPlanAgent(job, worktreePath, issueNumber, helperPath);
-    jobLog(job.id, `Plan agent completed in ${(performance.now() - planStart).toFixed(0)}ms, session: ${sessionId}, plan length: ${planMd.length} chars`);
+    if (!job.quickMode) {
+      jobLog(job.id, "Step 3/5: Running plan agent...");
+      await postInfo(job.id, "Planning started — running opencode plan agent...");
 
-    await postInfo(job.id, "Planning complete, posting plan for review...");
+      const planStart = performance.now();
+      const { planMd, sessionId } = await runPlanAgent(job, worktreePath, issueNumber, helperPath);
+      jobLog(job.id, `Plan agent completed in ${(performance.now() - planStart).toFixed(0)}ms, session: ${sessionId}, plan length: ${planMd.length} chars`);
 
-    jobLog(job.id, `Posting plan to Discord thread via planReady...`);
-    await client.planReady.mutate({ jobId: job.id, planMd, sessionId });
-    jobLog(job.id, `Plan posted to Discord`);
+      await postInfo(job.id, "Planning complete, posting plan for review...");
 
-    // ── Step 4: Approval loop ──────────────────────────────────────────────
-    jobLog(job.id, "Step 4/5: Waiting for approval...");
-    const finalSessionId = await waitForApproval(job.id, sessionId, worktreePath, job, helperPath);
-    if (finalSessionId === null) {
-      jobLog(job.id, "Job was cancelled by user");
-      if (issueNumber && !dryRun) {
-        const repoName = await getRepoNameWithOwner(repoPath).catch(() => "");
-        if (repoName) {
-          const closeArgs = ["issue", "close", String(issueNumber), "--repo", repoName];
-          jobLog(job.id, `Closing issue #${issueNumber}: gh ${closeArgs.join(" ")}`);
-          const closeProc = Bun.spawn(["gh", ...closeArgs], { cwd: repoPath, stdout: "pipe", stderr: "pipe" });
-          await closeProc.exited;
+      jobLog(job.id, `Posting plan to Discord thread via planReady...`);
+      await client.planReady.mutate({ jobId: job.id, planMd, sessionId });
+      jobLog(job.id, `Plan posted to Discord`);
+
+      // ── Step 4: Approval loop ────────────────────────────────────────────
+      jobLog(job.id, "Step 4/5: Waiting for approval...");
+      finalSessionId = await waitForApproval(job.id, sessionId, worktreePath, job, helperPath);
+      if (finalSessionId === null) {
+        jobLog(job.id, "Job was cancelled by user");
+        if (issueNumber && !dryRun) {
+          const repoName = await getRepoNameWithOwner(repoPath).catch(() => "");
+          if (repoName) {
+            const closeArgs = ["issue", "close", String(issueNumber), "--repo", repoName];
+            jobLog(job.id, `Closing issue #${issueNumber}: gh ${closeArgs.join(" ")}`);
+            const closeProc = Bun.spawn(["gh", ...closeArgs], { cwd: repoPath, stdout: "pipe", stderr: "pipe" });
+            await closeProc.exited;
+          }
         }
+        await client.postStatus.mutate({
+          jobId: job.id,
+          message: "Job cancelled",
+          level: "error",
+        });
+        cleanupWorktree(repoPath, branch).catch(() => {});
+        Bun.spawnSync(["rm", "-f", helperPath]);
+        return;
       }
-      await client.postStatus.mutate({
-        jobId: job.id,
-        message: "Job cancelled",
-        level: "error",
-      });
-      cleanupWorktree(repoPath, branch).catch(() => {});
-      Bun.spawnSync(["rm", "-f", helperPath]);
-      return;
+      jobLog(job.id, `Approval received, session: ${finalSessionId}`);
+    } else {
+      await postInfo(job.id, "Quick mode — skipping planning phase");
     }
-    jobLog(job.id, `Approval received, session: ${finalSessionId}`);
 
-    // ── Step 5: Build agent ────────────────────────────────────────────────
-    jobLog(job.id, "Step 5/5: Starting build agent...");
+    // ── Final Step: Build agent ────────────────────────────────────────────
+    jobLog(job.id, job.quickMode ? "Final step: Starting build agent..." : "Step 5/5: Starting build agent...");
     await postInfo(job.id, "Starting build agent...");
 
     const buildStart = performance.now();
-    const prUrl = await runBuildAgent(job.id, worktreePath, issueNumber, branch, helperPath, job.autoMode);
+    const prUrl = await runBuildAgent(job, worktreePath, issueNumber, branch, helperPath, job.autoMode, job.quickMode);
     jobLog(job.id, `Build agent completed in ${(performance.now() - buildStart).toFixed(0)}ms`);
 
     if (prUrl) {

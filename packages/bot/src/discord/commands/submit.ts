@@ -10,6 +10,9 @@ export class SubmitCommand extends Command {
     .setDescription("Submit the current report thread as a job")
     .addBooleanOption(o =>
       o.setName("auto").setDescription("Override auto-mode for this job").setRequired(false),
+    )
+    .addBooleanOption(o =>
+      o.setName("quick").setDescription("Skip planning, build directly").setRequired(false),
     ) as SlashCommandBuilder;
 
   async execute(interaction: CommandInteraction) {
@@ -34,6 +37,10 @@ export class SubmitCommand extends Command {
     const autoSetting = await prisma.setting.findUnique({ where: { key: "auto_mode" } });
     const autoMode = autoOverride ?? autoSetting?.value === "on";
 
+    const quickOverride = interaction.options.getBoolean("quick");
+    const quickSetting = await prisma.setting.findUnique({ where: { key: "quick_mode" } });
+    const quickMode = quickOverride ?? quickSetting?.value === "on";
+
     const messages: Message[] = [];
     let lastId: string | undefined;
 
@@ -56,6 +63,7 @@ export class SubmitCommand extends Command {
         kind: reportThread.kind,
         status: "pending",
         autoMode,
+        quickMode,
         context,
         reporterId: interaction.user.id,
       },
