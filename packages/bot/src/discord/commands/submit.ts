@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, CommandInteraction, Message, Collection } from "discord.js";
+import { SlashCommandBuilder, CommandInteraction, Message, Collection, ButtonBuilder, ButtonStyle, ActionRowBuilder, ComponentType } from "discord.js";
 import { prisma } from "../../db";
 import { runFallback, checkWorkerOnline } from "../fallback";
 import { buildContext } from "../context";
@@ -33,6 +33,18 @@ export class SubmitCommand extends Command {
       return;
     }
 
+    // Unarchive thread if it was previously archived
+    if (thread.archived || thread.locked) {
+      await thread.setLocked(false);
+      await thread.setArchived(false);
+    }
+
+    // Check if there's a completed job in this thread (for follow-up)
+    const lastCompletedJob = await prisma.job.findFirst({
+      where: { threadId: thread.id, status: "done" },
+      orderBy: { createdAt: "desc" },
+    });
+
     const autoOverride = interaction.options.getBoolean("auto");
     const autoSetting = await prisma.setting.findUnique({ where: { key: "auto_mode" } });
     const autoMode = autoOverride ?? autoSetting?.value === "on";
@@ -40,6 +52,49 @@ export class SubmitCommand extends Command {
     const quickOverride = interaction.options.getBoolean("quick");
     const quickSetting = await prisma.setting.findUnique({ where: { key: "quick_mode" } });
     const quickMode = quickOverride ?? quickSetting?.value === "on";
+
+    let isFollowUp = false;
+
+    if (lastCompletedJob) {
+      const continueBtn = new ButtonBuilder()
+        .setCustomId("continue_yes")
+        .setLabel("Yes, continue")
+        .setStyle(ButtonStyle.Success);
+
+      const freshBtn = new ButtonBuilder()
+        .setCustomId("continue_no")
+        .setLabel("No, start fresh")
+        .setStyle(ButtonStyle.Secondary);
+
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(continueBtn, freshBtn);
+
+      const reply = await interaction.reply({
+        content: `A previous job (#${lastCompletedJob.id}) was completed in this thread. Continue that session with your new messages?`,
+        components: [row],
+        ephemeral: true,
+      });
+
+      let buttonInteraction;
+      try {
+        buttonInteraction = await reply.awaitMessageComponent({
+          filter: i => i.user.id === interaction.user.id,
+          componentType: ComponentType.Button,
+          time: 30_000,
+        });
+      } catch {
+        await interaction.editReply({ content: "❌ Timed out — no changes submitted", components: [] });
+        return;
+      }
+
+      isFollowUp = buttonInteraction.customId === "continue_yes";
+      await buttonInteraction.update({
+        content: isFollowUp ? "ℹ️ Continuing previous session..." : "ℹ️ Creating new job...",
+        components: [],
+      });
+    } else {
+      // No completed job — reply and proceed immediately
+      await interaction.reply("ℹ️ Collecting messages and creating job...");
+    }
 
     const messages: Message[] = [];
     let lastId: string | undefined;
@@ -54,7 +109,14 @@ export class SubmitCommand extends Command {
       if (fetched.size < 100) break;
     }
 
-    const context = await buildContext(messages);
+    // For follow-ups, only include messages after the parent job was created
+    let contextMessages = messages;
+    if (isFollowUp && lastCompletedJob) {
+      const afterTimestamp = lastCompletedJob.createdAt.getTime();
+      contextMessages = messages.filter(m => m.createdTimestamp >= afterTimestamp);
+    }
+
+    const context = await buildContext(contextMessages);
 
     const job = await prisma.job.create({
       data: {
@@ -66,10 +128,11 @@ export class SubmitCommand extends Command {
         quickMode,
         context,
         reporterId: interaction.user.id,
+        parentJobId: isFollowUp ? lastCompletedJob!.id : null,
       },
     });
 
-    await interaction.reply(`ℹ️ Job #${job.id} created, waiting for worker...`);
+    await thread.send(`ℹ️ Job #${job.id} created, waiting for worker...`);
 
     const online = await checkWorkerOnline();
     if (!online) {

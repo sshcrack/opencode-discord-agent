@@ -59,8 +59,11 @@ model Job {
   reporterId        String?
   planMd            String?
   opencodeSessionId String?
+  buildSessionId    String?
   issueNumber       Int?
   prUrl             String?
+  branch            String?
+  parentJobId       Int?
   autoMode          Boolean    @default(false)
   quickMode         Boolean    @default(false)
   pendingSuggestion    String?
@@ -72,6 +75,8 @@ model Job {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   thread            ReportThread @relation(fields: [threadId], references: [threadId])
+  parent            Job?         @relation("JobChain", fields: [parentJobId], references: [id])
+  followUps         Job[]        @relation("JobChain")
 }
 
 model Setting {

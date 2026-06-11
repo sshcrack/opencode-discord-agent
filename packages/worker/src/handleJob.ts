@@ -1,9 +1,9 @@
-import { BOT_URL, SHARED_SECRET, dryRun } from "./env";
+import { BOT_URL, SHARED_SECRET, WORKER_ID, dryRun } from "./env";
 import { client, postInfo, postDebug } from "./trpc";
 import type { Job } from "./trpc";
 
 import { jobLog } from "./logging";
-import { createWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
+import { createWorktree, createFollowupWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
 import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
 import { waitForApproval } from "./approval";
@@ -39,18 +39,51 @@ async function handleJob(job: Job) {
 
   const jobStart = performance.now();
   let helperPath = "";
+  let isFollowUp = false;
+  let followUpSession: string | null = null;
+  let followUpIssueNumber: number | null = null;
+  let followUpBranch: string | null = null;
+
+  // ── Check if this is a follow-up job ─────────────────────────────────
+  if (job.parentJobId) {
+    isFollowUp = true;
+    jobLog(job.id, `This is a follow-up to job #${job.parentJobId}`);
+    try {
+      const parent = await client.getJobStatus.query({ jobId: job.parentJobId, workerId: WORKER_ID });
+      if (parent) {
+        followUpSession = parent.buildSessionId;
+        followUpIssueNumber = parent.issueNumber;
+        followUpBranch = parent.branch;
+        jobLog(job.id, `Parent build session: ${followUpSession ?? "none"}, issue: ${followUpIssueNumber}, branch: ${followUpBranch ?? "none"}`);
+      } else {
+        jobLog(job.id, `Parent job #${job.parentJobId} not found — treating as fresh job`);
+        isFollowUp = false;
+      }
+    } catch (err: any) {
+      jobLog(job.id, `Failed to fetch parent job #${job.parentJobId}: ${err?.message ?? err}`);
+      isFollowUp = false;
+    }
+  }
 
   try {
     // ── Step 1: Create worktree ────────────────────────────────────────────
-    jobLog(job.id, "Step 1/5: Creating worktree...");
-    await postInfo(job.id, "Creating worktree...");
+    let branch: string;
+    let worktreePath: string;
 
-    const branch = `report-${job.id}-${Date.now().toString(36)}`;
-    jobLog(job.id, `Branch: ${branch}`);
-
-    const stepStart = performance.now();
-    const worktreePath = await createWorktree(repoPath, branch, job.id);
-    jobLog(job.id, `Worktree created at ${worktreePath} (${(performance.now() - stepStart).toFixed(0)}ms)`);
+    if (isFollowUp && followUpBranch) {
+      jobLog(job.id, "Step 1/5: Creating follow-up worktree from parent branch...");
+      await postInfo(job.id, "Creating worktree from parent branch...");
+      branch = `followup-${job.id}-${Date.now().toString(36)}`;
+      worktreePath = await createFollowupWorktree(repoPath, followUpBranch, branch, job.id);
+      jobLog(job.id, `Follow-up worktree created at ${worktreePath} on branch ${branch}`);
+    } else {
+      jobLog(job.id, "Step 1/5: Creating worktree...");
+      await postInfo(job.id, "Creating worktree...");
+      branch = `report-${job.id}-${Date.now().toString(36)}`;
+      const stepStart = performance.now();
+      worktreePath = await createWorktree(repoPath, branch, job.id);
+      jobLog(job.id, `Worktree created at ${worktreePath} (${(performance.now() - stepStart).toFixed(0)}ms)`);
+    }
 
     if (!dryRun) {
       await postDebug(job.id, `Worktree: \`${worktreePath}\` on branch \`${branch}\``);
@@ -101,10 +134,10 @@ if (cmd === "ask") {
     Bun.spawnSync(["chmod", "700", helperPath]);
     jobLog(job.id, `Discord helper created at ${helperPath}`);
 
-    // ── Step 2: Use pre-generated issue or generate one ────────────────────
-    let issueNumber = job.issueNumber;
+    // ── Step 2: Issue generation (skip for follow-ups) ────────────────────
+    let issueNumber = job.issueNumber ?? followUpIssueNumber;
 
-    if (!issueNumber) {
+    if (!issueNumber && !isFollowUp) {
       jobLog(job.id, "Step 2/5: Generating GitHub issue...");
       await postInfo(job.id, "Generating GitHub issue...");
 
@@ -128,10 +161,12 @@ if (cmd === "ask") {
         const threadName = `#${issueNumber} ${issueTitle.replace(/^#+\s*/, "").trim()}`.slice(0, 100);
         await client.renameJobThread.mutate({ jobId: job.id, name: threadName }).catch(() => {});
       }
+    } else if (issueNumber) {
+      jobLog(job.id, `Using existing issue #${issueNumber}${isFollowUp ? " (from parent job)" : ""}`);
     }
 
     // Rename thread for pre-existing issues (was never renamed at creation)
-    if (issueNumber && job.issueNumber) {
+    if (issueNumber && job.issueNumber && !isFollowUp) {
       jobLog(job.id, `Renaming thread for pre-existing issue #${issueNumber}...`);
       if (dryRun) {
         jobLog(job.id, `[DRY RUN] Would rename thread to #${issueNumber} {title}`);
@@ -154,10 +189,13 @@ if (cmd === "ask") {
       }
     }
 
-    // ── Step 3: Plan agent + Step 4: Approval (skip in quick mode) ─────────
+    // ── Step 3: Plan agent + Step 4: Approval (skip in quick mode and follow-up) ─
     let finalSessionId: string | null | undefined;
 
-    if (!job.quickMode) {
+    if (isFollowUp) {
+      jobLog(job.id, "Follow-up job — skipping planning phase, resuming build session");
+      await postInfo(job.id, "Continuing previous session...");
+    } else if (!job.quickMode) {
       jobLog(job.id, "Step 3/5: Running plan agent...");
       await postInfo(job.id, "Planning started — running opencode plan agent...");
 
@@ -200,16 +238,29 @@ if (cmd === "ask") {
     }
 
     // ── Final Step: Build agent ────────────────────────────────────────────
-    jobLog(job.id, job.quickMode ? "Final step: Starting build agent..." : "Step 5/5: Starting build agent...");
-    await postInfo(job.id, "Starting build agent...");
+    if (isFollowUp) {
+      await postInfo(job.id, "Resuming build session with new context...");
+    } else {
+      jobLog(job.id, job.quickMode ? "Final step: Starting build agent..." : "Step 5/5: Starting build agent...");
+      await postInfo(job.id, "Starting build agent...");
+    }
 
     const buildStart = performance.now();
-    const prUrl = await runBuildAgent(job, worktreePath, issueNumber, branch, helperPath, job.autoMode, job.quickMode);
+    const buildResult = await runBuildAgent(
+      job, worktreePath, issueNumber, branch, helperPath,
+      job.autoMode, job.quickMode,
+      isFollowUp ? followUpSession : null,
+    );
     jobLog(job.id, `Build agent completed in ${(performance.now() - buildStart).toFixed(0)}ms`);
 
-    if (prUrl) {
-      jobLog(job.id, `PR created: ${prUrl}`);
-      await client.markComplete.mutate({ jobId: job.id, prUrl }).catch((err) => {
+    if (buildResult.prUrl) {
+      jobLog(job.id, `PR created: ${buildResult.prUrl}`);
+      await client.markComplete.mutate({
+        jobId: job.id,
+        prUrl: buildResult.prUrl,
+        buildSessionId: buildResult.sessionId ?? undefined,
+        branch,
+      }).catch((err) => {
         jobLog(job.id, `Failed to mark job complete: ${err}`);
       });
     } else {
