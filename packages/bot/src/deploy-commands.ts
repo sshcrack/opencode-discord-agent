@@ -2,16 +2,14 @@ import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v10";
 import { commands } from "./discord/commands";
 
-const { DISCORD_TOKEN, CLIENT_ID: rawClientId, ALLOWED_GUILD_ID } = process.env;
+export async function registerCommands() {
+  const { DISCORD_TOKEN, CLIENT_ID: rawClientId, ALLOWED_GUILD_ID } = process.env;
 
-if (!DISCORD_TOKEN) throw new Error("DISCORD_TOKEN is required");
-if (!rawClientId) throw new Error("CLIENT_ID is required");
+  if (!DISCORD_TOKEN) throw new Error("DISCORD_TOKEN is required");
+  if (!rawClientId) throw new Error("CLIENT_ID is required");
 
-const CLIENT_ID: string = rawClientId;
-
-const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
-
-async function main() {
+  const CLIENT_ID: string = rawClientId;
+  const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
   const commandData = commands.map((cmd) => cmd.toJSON());
 
   // Delete all guild commands before switching to global-only
@@ -49,7 +47,8 @@ async function main() {
   console.log("Successfully registered application commands.");
 }
 
-main().catch((err) => {
+// CLI entry point — run directly via `bun run src/deploy-commands.ts`
+registerCommands().catch((err) => {
   console.error("Failed to register commands:", err);
   process.exit(1);
 });
