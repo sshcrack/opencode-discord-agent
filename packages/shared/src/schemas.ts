@@ -191,3 +191,11 @@ export const PollAnswerOutput = z.object({
   answered: z.boolean(),
   formatted: z.string().nullable(),
 });
+
+export const ReleaseWorkerJobsInput = z.object({
+  workerId: z.string(),
+});
+
+export const ReleaseWorkerJobsOutput = z.object({
+  released: z.number(),
+});

@@ -1,6 +1,7 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { handlePlanGet, handlePlanPut, handlePlanApprove } from "./planApi";
+import { prisma } from "../db";
 
 let trpcServer: ReturnType<typeof Bun.serve> | null = null;
 
@@ -38,6 +39,35 @@ export function getTRPCServer() {
 export function stopTRPCServer() {
   trpcServer?.stop();
   trpcServer = null;
+}
+
+export async function gracefulShutdown(): Promise<void> {
+  console.log("[Shutdown] Releasing all in-flight jobs...");
+
+  const result = await prisma.job.updateMany({
+    where: {
+      status: { in: ["claimed", "planning", "plan_ready", "approved", "building"] },
+    },
+    data: {
+      status: "pending",
+      workerId: null,
+      planMd: null,
+      opencodeSessionId: null,
+      buildSessionId: null,
+      pendingSuggestion: null,
+      planEditToken: null,
+      pendingQuestions: null,
+      pendingQuestionIndex: null,
+      pendingAnswers: null,
+      statusMessageId: null,
+    },
+  });
+
+  console.log(`[Shutdown] Released ${result.count} job(s)`);
+
+  stopTRPCServer();
+  await prisma.$disconnect();
+  console.log("[Shutdown] Complete");
 }
 
 export function createTRPCServer(port: number) {

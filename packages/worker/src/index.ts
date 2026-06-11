@@ -2,6 +2,20 @@ import { BOT_URL, WORKER_ID, dryRun } from "./env";
 import { workerLog } from "./logging";
 import { poll, heartbeat, checkForUpdates } from "./polling";
 
+process.on("SIGTERM", async () => {
+  console.log("[SIGTERM] Worker shutting down gracefully...");
+  const { releaseAllJobs } = await import("./state");
+  await releaseAllJobs();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  console.log("[SIGINT] Worker shutting down gracefully...");
+  const { releaseAllJobs } = await import("./state");
+  await releaseAllJobs();
+  process.exit(0);
+});
+
 async function main() {
   console.log(`╔══════════════════════════════════════════════╗`);
   console.log(`║  Worker ${WORKER_ID.padEnd(10)}                 ║`);
