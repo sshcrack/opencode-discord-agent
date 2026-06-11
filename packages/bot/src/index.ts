@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Events, TextChannel, ThreadChannel } from "discord.js";
+import { Client, GatewayIntentBits, Events, TextChannel, ThreadChannel, ChannelType } from "discord.js";
 import { prisma } from "./db";
 import { handleCommand } from "./discord/commands";
 import { handleAutocomplete, handleButton } from "./discord/interactions";
@@ -51,6 +51,40 @@ client.once(Events.ClientReady, async (c) => {
       // channel might be gone
     }
     await prisma.setting.delete({ where: { key: "last_update_channel_id" } }).catch(() => {});
+  }
+
+  // Reconcile repo channels on startup
+  try {
+    const repos = await prisma.repository.findMany();
+    for (const repo of repos) {
+      if (repo.channelId) {
+        try {
+          const ch = await client.channels.fetch(repo.channelId);
+          if (!ch) {
+            console.warn(`[Startup] Channel ${repo.channelId} for repo ${repo.slug} no longer exists`);
+          }
+        } catch {
+          console.warn(`[Startup] Failed to fetch channel ${repo.channelId} for repo ${repo.slug} — removing stale mapping`);
+          await prisma.repository.update({
+            where: { id: repo.id },
+            data: { channelId: null },
+          });
+        }
+      } else if (c.guilds.cache.size > 0) {
+        for (const guild of c.guilds.cache.values()) {
+          const existing = guild.channels.cache.find(ch => ch.name === repo.slug && ch.type === ChannelType.GuildText);
+          if (existing) {
+            await prisma.repository.update({
+              where: { id: repo.id },
+              data: { channelId: existing.id },
+            });
+            console.log(`[Startup] Bound existing channel #${existing.name} (${existing.id}) to repo ${repo.slug}`);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Startup] Repo channel reconciliation error:", err);
   }
 
   const updatePresence = async () => {
