@@ -109,7 +109,7 @@ async function waitForApproval(
     - "options" (required): proposed answers the user can pick from
     - "recommended" (required): index of the recommended option
 
-  Always provide options + a recommended answer. The script blocks until all questions are answered.`,
+  The script posts questions and returns immediately — answers are injected later. Always provide options + a recommended answer.`,
         ].filter(Boolean).join(" ");
         const result = await runOpencodeStreaming(
           jobId,

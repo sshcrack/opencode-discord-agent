@@ -35,14 +35,8 @@ Examples:
   # Multiple questions (answered one at a time in Discord):
   ${helperPath} ask '[{"q":"Color?","options":["Red","Blue"],"recommended":0},{"q":"Size?","options":["S","M","L"],"recommended":1}]'
 
-The script blocks until all questions are answered. The output is:
-  Q: Color?
-  A: Red
-
-  Q: Size?
-  A: Large
-
-Always provide options + a recommended answer.`;
+The script posts questions to Discord and returns immediately. Answers will be injected into the session automatically.
+Write the best plan you can without the answers. Always provide options + a recommended answer.`;
 
   const helperBlock = `\n\nYou can post messages to the Discord thread and rename it by running:
   \`${helperPath} info "message"\` — info level
