@@ -1,27 +1,23 @@
 import { WORKER_ID, dryRun } from "./env";
 import { client, type Job } from "./trpc";
 import { workerLog } from "./logging";
-import { getActiveJobId, setActiveJobId } from "./state";
+import { registerJob, unregisterJob, isEmpty } from "./state";
 import { handleJob } from "./handleJob";
 
 async function poll(): Promise<void> {
-  if (getActiveJobId() !== null) {
-    workerLog(`Skipping poll — job #${getActiveJobId()} still active`);
-    return;
-  }
   const localHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
-  const start = performance.now();
   const result = await client.pollNextJob.query({ workerId: WORKER_ID, gitHead: localHead });
+
   if (result.gitMismatch) {
     workerLog(`Outdated (local: ${localHead.slice(0, 12)}) — updating before claiming job...`);
     runUpdate();
     return;
   }
-  if (result.job) {
-    const elapsed = (performance.now() - start).toFixed(0);
-    workerLog(`Claimed job #${result.job.id} for repo ${result.job.repoSlug} (poll took ${elapsed}ms)`);
-    setActiveJobId(result.job.id);
-    await handleJob(result.job);
+
+  for (const job of result.jobs ?? []) {
+    workerLog(`Claimed job #${job.id} for repo ${job.repoSlug}`);
+    registerJob(job.id, job.threadId);
+    handleJob(job).finally(() => unregisterJob(job.id));
   }
 }
 
@@ -51,7 +47,7 @@ async function heartbeat() {
 }
 
 async function checkForUpdates() {
-  if (getActiveJobId() !== null) return;
+  if (!isEmpty()) return;
   if (dryRun) return;
 
   try {

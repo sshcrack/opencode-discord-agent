@@ -66,7 +66,7 @@ export const PollNextJobInput = z.object({
 });
 
 export const PollNextJobOutput = z.object({
-  job: JobSchema.nullable(),
+  jobs: z.array(JobSchema),
   gitMismatch: z.boolean(),
 });
 

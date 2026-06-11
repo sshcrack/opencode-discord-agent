@@ -86,7 +86,7 @@ Always provide options + a recommended answer.`;
 
   jobLog(job.id, `Starting opencode build agent in ${worktreePath}`);
   const buildStart = performance.now();
-  await runOpencodeStreaming(job.id, worktreePath, [
+  await runOpencodeStreaming(job.id, worktreePath, undefined, [
     "opencode", "run", "--agent", "build", "--dir", worktreePath, prompt,
   ]);
   jobLog(job.id, `Build agent finished in ${(performance.now() - buildStart).toFixed(0)}ms`);

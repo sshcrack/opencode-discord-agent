@@ -1,11 +1,12 @@
 import { skipPermissionsArg } from "./env";
 import { client } from "./trpc";
 import { jobLog } from "./logging";
-import { handleJsonEvent, extractPlanPath } from "./events";
+import { handleJsonEvent } from "./events";
 
 async function runOpencodeStreaming(
   jobId: number,
   cwd: string,
+  planFilePath: string | undefined,
   argv: string[],
   extraArgs: string[] = [],
 ): Promise<{ planMd: string; sessionId: string }> {
@@ -19,8 +20,6 @@ async function runOpencodeStreaming(
   });
 
   let sessionId = "";
-  let planPath: string | null = null;
-  const textParts: string[] = [];
   let lineCount = 0;
   let buffer = "";
 
@@ -62,15 +61,6 @@ async function runOpencodeStreaming(
             .mutate({ jobId, message: result.message, level: result.level, append: result.append })
             .catch(() => {});
         }
-
-        if (event.type === "text" && event.part?.text?.trim()) {
-          const text = event.part.text.trim();
-          textParts.push(text);
-          if (!planPath) {
-            const extracted = extractPlanPath(text);
-            if (extracted) planPath = extracted;
-          }
-        }
       }
     }
   } finally {
@@ -104,19 +94,17 @@ async function runOpencodeStreaming(
     throw new Error(`opencode failed (exit ${exitCode}): ${stderr.slice(0, 500)}`);
   }
 
-  let planMd: string;
-  if (planPath) {
-    jobLog(jobId, `Reading plan from reported path: ${planPath}`);
-    planMd = await Bun.file(planPath).text().catch(() => {
-      jobLog(jobId, `Failed to read plan from ${planPath}, falling back to text`);
-      return textParts.join("\n\n");
-    });
-  } else if (textParts.length > 0) {
-    jobLog(jobId, `No plan path reported, using ${textParts.length} text parts`);
-    planMd = textParts.join("\n\n");
-  } else {
-    jobLog(jobId, `No plan path or text content available`);
-    planMd = "";
+  let planMd = "";
+  if (planFilePath) {
+    await Bun.sleep(500);
+    const file = Bun.file(planFilePath);
+    const exists = await file.exists();
+    if (exists) {
+      planMd = await file.text();
+      jobLog(jobId, `Read plan from ${planFilePath} (${planMd.length} chars)`);
+    } else {
+      jobLog(jobId, `Plan file not found at ${planFilePath}`);
+    }
   }
 
   if (!sessionId) {

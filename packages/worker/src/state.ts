@@ -1,29 +1,31 @@
 import { client } from "./trpc";
 
-let _activeJobId: number | null = null;
-let typingInterval: Timer | null = null;
-
-function getActiveJobId(): number | null {
-  return _activeJobId;
+interface JobContext {
+  jobId: number;
+  threadId: string;
+  typingInterval: Timer | null;
+  startedAt: number;
 }
 
-function setActiveJobId(id: number | null): void {
-  _activeJobId = id;
-}
+const jobs = new Map<number, JobContext>();
 
-function startTyping(threadId: string, jobId: number) {
-  stopTyping();
-  typingInterval = setInterval(async () => {
-    await client.typing.mutate({ jobId, threadId }).catch(() => {});
+function registerJob(jobId: number, threadId: string): void {
+  const ctx: JobContext = { jobId, threadId, typingInterval: null, startedAt: Date.now() };
+  ctx.typingInterval = setInterval(() => {
+    client.typing.mutate({ jobId, threadId }).catch(() => {});
   }, 8_000);
   client.typing.mutate({ jobId, threadId }).catch(() => {});
+  jobs.set(jobId, ctx);
 }
 
-function stopTyping() {
-  if (typingInterval) {
-    clearInterval(typingInterval);
-    typingInterval = null;
-  }
+function unregisterJob(jobId: number): void {
+  const ctx = jobs.get(jobId);
+  if (ctx?.typingInterval) clearInterval(ctx.typingInterval);
+  jobs.delete(jobId);
 }
 
-export { getActiveJobId, setActiveJobId, startTyping, stopTyping };
+function isEmpty(): boolean {
+  return jobs.size === 0;
+}
+
+export { registerJob, unregisterJob, isEmpty };

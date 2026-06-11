@@ -1,7 +1,7 @@
 import { BOT_URL, SHARED_SECRET, dryRun } from "./env";
 import { client, postInfo, postDebug } from "./trpc";
 import type { Job } from "./trpc";
-import { setActiveJobId, startTyping, stopTyping } from "./state";
+
 import { jobLog } from "./logging";
 import { createWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
 import { generateIssue } from "./issue";
@@ -19,7 +19,6 @@ async function handleJob(job: Job) {
       level: "error",
     });
     await client.cancelJob.mutate({ jobId: job.id });
-    setActiveJobId(null);
     return;
   }
 
@@ -31,15 +30,12 @@ async function handleJob(job: Job) {
       level: "error",
     });
     await client.cancelJob.mutate({ jobId: job.id });
-    setActiveJobId(null);
     return;
   }
 
   jobLog(job.id, `Starting job for ${job.repoSlug} at ${repoPath} (kind: ${job.kind}, auto: ${job.autoMode}, dryRun: ${dryRun})`);
   if (job.issueNumber) jobLog(job.id, `Pre-existing issue #${job.issueNumber}`);
   if (job.context) jobLog(job.id, `Context length: ${job.context.length} chars`);
-
-  startTyping(job.threadId, job.id);
 
   const jobStart = performance.now();
   let helperPath = "";
@@ -194,10 +190,8 @@ if (cmd === "ask") {
           message: "Job cancelled",
           level: "error",
         });
-        stopTyping();
         cleanupWorktree(repoPath, branch).catch(() => {});
         Bun.spawnSync(["rm", "-f", helperPath]);
-        setActiveJobId(null);
         return;
       }
       jobLog(job.id, `Approval received, session: ${finalSessionId}`);
@@ -227,14 +221,12 @@ if (cmd === "ask") {
       });
     }
 
-    stopTyping();
     cleanupWorktree(repoPath, branch).catch(() => {});
   } catch (err: any) {
     const elapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
     jobLog(job.id, `Job FAILED after ${elapsed}s: ${err?.message ?? String(err)}`);
     if (err?.stack) jobLog(job.id, `Stack: ${err.stack}`);
     console.error(err);
-    stopTyping();
     if (helperPath) Bun.spawnSync(["rm", "-f", helperPath]);
     await client.postStatus.mutate({
       jobId: job.id,
@@ -245,9 +237,7 @@ if (cmd === "ask") {
 
   const totalElapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
   jobLog(job.id, `Job finished in ${totalElapsed}s`);
-  stopTyping();
   Bun.spawnSync(["rm", "-f", helperPath]);
-  setActiveJobId(null);
 }
 
 export { handleJob };
