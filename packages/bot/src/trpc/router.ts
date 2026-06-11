@@ -316,7 +316,7 @@ export const appRouter = t.router({
         },
       });
 
-      await showNextQuestion(job.threadId, job.id, input.questions, 0);
+      await showNextQuestion(job.threadId, job.id, input.questions, 0, job.reporterId);
 
       return { success: true };
     }),
