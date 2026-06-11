@@ -89,19 +89,9 @@ async function waitForApproval(
         const issueRef = current.issueNumber
           ? ` The related GitHub issue is #${current.issueNumber}.`
           : "";
-        const prompt = [
-          `You are a planning agent for a ${current.kind} task on repository ${current.repoSlug}.${issueRef}`,
-          `Review the codebase and write a detailed implementation plan based on this suggestion: "${suggestion}".`,
-          `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
-          `The plan should cover: files to change, approach, and any risk areas.`,
-          `Write the plan to \`${planFilePath}\` (create the directory if it doesn't exist).`,
-          current.context ? `\n\nDiscord report context:\n${current.context}` : "",
-          `\n\nYou can post messages to the Discord thread and rename it by running:
-  \`${helperPath} info "message"\` — info
-  \`${helperPath} success "message"\` — success
-  \`${helperPath} error "message"\` — error
-  \`${helperPath} --rename "new name"\` — rename thread`,
-          current.autoMode ? "" : `\n\nYou can ask questions and wait for answers using:
+        const writeInstruction = `Write the plan to \`${planFilePath}\` (create the directory if it doesn't exist).`;
+
+        const askBlock = current.autoMode ? "" : `\n\nIf you have questions, invoke the following script and then STOP — do NOT write the plan yet. Your questions and the answers will be provided in the next prompt, and you will continue from there:
   \`${helperPath} ask '...json...'\`
 
   The \`ask\` command takes a JSON array argument. Each object has:
@@ -109,7 +99,25 @@ async function waitForApproval(
     - "options" (required): proposed answers the user can pick from
     - "recommended" (required): index of the recommended option
 
-  The script posts questions and returns immediately — answers are injected later. Always provide options + a recommended answer.`,
+  Examples:
+    # One question:
+    ${helperPath} ask '[{"q":"What approach?","options":["Refactor","Rewrite"],"recommended":0}]'
+
+  If you do NOT have questions, ${writeInstruction.toLowerCase().replace("write the plan", "write the revised plan")} Always provide options + a recommended answer.`;
+
+        const prompt = [
+          `You are a planning agent for a ${current.kind} task on repository ${current.repoSlug}.${issueRef}`,
+          `Review the codebase and write a detailed implementation plan based on this suggestion: "${suggestion}".`,
+          `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
+          `The plan should cover: files to change, approach, and any risk areas.`,
+          current.autoMode ? writeInstruction : "",
+          current.context ? `\n\nDiscord report context:\n${current.context}` : "",
+          `\n\nYou can post messages to the Discord thread and rename it by running:
+  \`${helperPath} info "message"\` — info
+  \`${helperPath} success "message"\` — success
+  \`${helperPath} error "message"\` — error
+  \`${helperPath} --rename "new name"\` — rename thread`,
+          askBlock,
         ].filter(Boolean).join(" ");
         const result = await runOpencodeStreaming(
           jobId,
