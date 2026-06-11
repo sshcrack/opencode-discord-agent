@@ -42,8 +42,11 @@ function toJobOutput(job: Job) {
     reporterId: job.reporterId,
     planMd: job.planMd,
     opencodeSessionId: job.opencodeSessionId,
+    buildSessionId: job.buildSessionId,
     issueNumber: job.issueNumber,
     prUrl: job.prUrl,
+    branch: job.branch,
+    parentJobId: job.parentJobId,
     autoMode: job.autoMode,
     quickMode: job.quickMode,
     pendingSuggestion: job.pendingSuggestion,
@@ -282,12 +285,13 @@ export const appRouter = t.router({
         data: {
           status: "done",
           prUrl: input.prUrl,
+          buildSessionId: input.buildSessionId,
+          branch: input.branch,
         },
       });
 
       await postToThread(job.threadId, `✅ PR created: ${input.prUrl}`);
       await postToThread(job.threadId, `✅ Job complete! <@${job.reporterId}> your PR is ready!`);
-      await closeThread(job.threadId);
 
       return { success: true };
     }),

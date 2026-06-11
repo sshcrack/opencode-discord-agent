@@ -49,8 +49,11 @@ export const JobSchema = z.object({
   reporterId: z.string().nullable(),
   planMd: z.string().nullable(),
   opencodeSessionId: z.string().nullable(),
+  buildSessionId: z.string().nullable(),
   issueNumber: z.number().nullable(),
   prUrl: z.string().nullable(),
+  branch: z.string().nullable(),
+  parentJobId: z.number().nullable(),
   autoMode: z.boolean(),
   quickMode: z.boolean(),
   pendingSuggestion: z.string().nullable(),
@@ -160,6 +163,8 @@ export const RenameThreadInput = z.object({
 export const MarkCompleteInput = z.object({
   jobId: z.number(),
   prUrl: z.string(),
+  buildSessionId: z.string().optional(),
+  branch: z.string().optional(),
 });
 
 const QuestionSchema = z.object({

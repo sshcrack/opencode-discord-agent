@@ -12,7 +12,8 @@ async function runBuildAgent(
   helperPath: string,
   autoMode: boolean,
   quickMode: boolean,
-): Promise<string | null> {
+  sessionToResume?: string | null,
+): Promise<{ prUrl: string | null; sessionId: string | null }> {
   const issueRef = issueNumber
     ? `The related GitHub issue is #${issueNumber} — make sure the PR body contains "Closes #${issueNumber}".`
     : "";
@@ -49,7 +50,17 @@ Always provide options + a recommended answer.`;
 
   let prompt: string;
 
-  if (quickMode) {
+  if (sessionToResume) {
+    // Follow-up: continue existing session with new context
+    prompt = [
+      `Continue the previous work with this new context from the Discord thread:`,
+      job.context ? `\n\nNew messages:\n${job.context}` : "",
+      issueRef,
+      `Continue working on the same branch. When done, commit all changes, push, and create a pull request (or update the existing one).`,
+      helperBlock,
+      askBlock,
+    ].filter(Boolean).join(" ");
+  } else if (quickMode) {
     const contextBlock = job.context
       ? `\n\nThe following is the Discord report thread context with file attachments:\n${job.context}`
       : "";
@@ -74,22 +85,26 @@ Always provide options + a recommended answer.`;
     ].filter(Boolean).join(" ");
   }
 
-  jobLog(job.id, `Build prompt: ${prompt.length} chars, issueRef: ${!!issueNumber}, quickMode: ${quickMode}`);
+  jobLog(job.id, `Build prompt: ${prompt.length} chars, issueRef: ${!!issueNumber}, quickMode: ${quickMode}, resume: ${!!sessionToResume}`);
 
   if (dryRun) {
     jobLog(job.id, `[DRY RUN] 🔧 Build agent`);
     jobLog(job.id, `[DRY RUN] Prompt: ${prompt}`);
     jobLog(job.id, `[DRY RUN] Would run: opencode run --agent build --print ...`);
     await postInfo(job.id, `[DRY RUN] Build agent skipped — prompt logged to worker console`);
-    return null;
+    return { prUrl: null, sessionId: null };
   }
 
   jobLog(job.id, `Starting opencode build agent in ${worktreePath}`);
   const buildStart = performance.now();
-  await runOpencodeStreaming(job.id, worktreePath, undefined, [
-    "opencode", "run", "--agent", "build", "--dir", worktreePath, prompt,
-  ]);
-  jobLog(job.id, `Build agent finished in ${(performance.now() - buildStart).toFixed(0)}ms`);
+  const buildArgs = ["opencode", "run", "--agent", "build", "--dir", worktreePath];
+  if (sessionToResume) {
+    buildArgs.push("--session", sessionToResume, "--continue");
+  }
+  buildArgs.push(prompt);
+
+  const { sessionId } = await runOpencodeStreaming(job.id, worktreePath, undefined, buildArgs);
+  jobLog(job.id, `Build agent finished in ${(performance.now() - buildStart).toFixed(0)}ms, session: ${sessionId}`);
 
   const prView = Bun.spawnSync(["gh", "pr", "view", "--json", "url", "--jq", ".url"], {
     cwd: worktreePath,
@@ -97,18 +112,28 @@ Always provide options + a recommended answer.`;
 
   if (prView.exitCode !== 0) {
     const stderr = prView.stderr.toString().trim().slice(0, 400);
-    jobLog(job.id, `Failed to get PR URL: ${stderr}`);
-    await client.postStatus.mutate({
-      jobId: job.id,
-      message: `Failed to find PR: ${stderr}`,
-      level: "error",
+    // PR might not exist yet — try creating it
+    const createView = Bun.spawnSync(["gh", "pr", "create", "--fill", "--json", "url", "--jq", ".url"], {
+      cwd: worktreePath,
     });
-    return null;
+    if (createView.exitCode !== 0) {
+      const createErr = createView.stderr.toString().trim().slice(0, 400);
+      jobLog(job.id, `Failed to get/create PR URL: ${createErr}`);
+      await client.postStatus.mutate({
+        jobId: job.id,
+        message: `Failed to find/create PR: ${createErr}`,
+        level: "error",
+      });
+      return { prUrl: null, sessionId: sessionId || null };
+    }
+    const prUrl = createView.stdout.toString().trim();
+    jobLog(job.id, `PR URL (created): ${prUrl}`);
+    return { prUrl: prUrl || null, sessionId: sessionId || null };
   }
 
   const prUrl = prView.stdout.toString().trim();
   jobLog(job.id, `PR URL: ${prUrl}`);
-  return prUrl || null;
+  return { prUrl: prUrl || null, sessionId: sessionId || null };
 }
 
 export { runBuildAgent };
