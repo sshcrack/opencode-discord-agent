@@ -117,4 +117,33 @@ async function ensureFollowupWorktree(repoPath: string, parentBranch: string, ne
   return worktreePath;
 }
 
-export { setupGitAuthor, ensureWorktree, ensureFollowupWorktree, cleanupWorktree, getRepoNameWithOwner, getPRBaseBranch };
+async function ensureReviewWorktree(repoPath: string, prNumber: number, jobId: number): Promise<{ worktreePath: string; branch: string }> {
+  const branch = `review-pr-${prNumber}-${jobId}`;
+
+  if (dryRun) {
+    jobLog(jobId, `[DRY RUN] Fetching PR #${prNumber} head into refs/heads/${branch}`);
+    jobLog(jobId, `[DRY RUN] gwq add -b ${branch} (in ${repoPath})`);
+    return { worktreePath: repoPath, branch };
+  }
+
+  // Step 1: Fetch PR head as a local branch
+  await execCommand("git", ["fetch", "origin", `pull/${prNumber}/head:refs/heads/${branch}`], repoPath, jobId);
+
+  // Step 2: Reuse existing worktree if it exists
+  try {
+    const worktreePath = (await execCommand("gwq", ["get", branch], repoPath, jobId)).trim();
+    jobLog(jobId, `Reusing existing worktree at ${worktreePath} for ${branch}`);
+    return { worktreePath, branch };
+  } catch {
+    jobLog(jobId, `No existing worktree for ${branch} — creating new one`);
+  }
+
+  // Step 3: Create new worktree with gwq
+  await execCommand("gwq", ["add", "-b", branch], repoPath, jobId);
+  const worktreePath = (await execCommand("gwq", ["get", branch], repoPath, jobId)).trim();
+
+  jobLog(jobId, `PR review worktree ready at ${worktreePath} for ${branch}`);
+  return { worktreePath, branch };
+}
+
+export { setupGitAuthor, ensureWorktree, ensureFollowupWorktree, ensureReviewWorktree, cleanupWorktree, getRepoNameWithOwner, getPRBaseBranch };

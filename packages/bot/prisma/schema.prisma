@@ -62,6 +62,7 @@ model Job {
   opencodeSessionId String?
   buildSessionId    String?
   issueNumber       Int?
+  mergedAt          DateTime?
   prUrl             String?
   branch            String?
   parentJobId       Int?

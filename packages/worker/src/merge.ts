@@ -7,6 +7,7 @@ interface MergeResult {
   method: "auto-merge" | "squash" | null;
   success: boolean;
   error?: string;
+  mergedAt?: string;
 }
 
 async function mergePR(jobId: number, worktreePath: string, prUrl: string): Promise<MergeResult> {
@@ -56,7 +57,7 @@ async function mergePR(jobId: number, worktreePath: string, prUrl: string): Prom
 
   if (squashExit === 0) {
     jobLog(jobId, `PR merged via squash`);
-    return { method: "squash", success: true };
+    return { method: "squash", success: true, mergedAt: new Date().toISOString() };
   }
 
   const squashStderr = await new Response(squashProc.stderr).text();

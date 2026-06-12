@@ -1,8 +1,88 @@
-import { dryRun, isENOENT, formatENOENT } from "./env";
+import {
+  dryRun,
+  ghToken,
+  gitBotName,
+  gitBotEmail,
+  gitCoauthorName,
+  gitCoauthorEmail,
+  hasCoauthor,
+  isENOENT,
+  formatENOENT,
+} from "./env";
 import { client, postInfo } from "./trpc";
 import type { Job } from "./trpc";
 import { jobLog } from "./logging";
 import { runOpencodeStreaming } from "./opencode";
+
+function setupGitAuthor(worktreePath: string, jobId: number) {
+  Bun.spawnSync(["git", "config", "user.name", gitBotName], { cwd: worktreePath });
+  Bun.spawnSync(["git", "config", "user.email", gitBotEmail], { cwd: worktreePath });
+
+  process.env.GIT_AUTHOR_NAME = gitBotName;
+  process.env.GIT_AUTHOR_EMAIL = gitBotEmail;
+  process.env.GIT_COMMITTER_NAME = gitBotName;
+  process.env.GIT_COMMITTER_EMAIL = gitBotEmail;
+
+  if (ghToken) {
+    process.env.GH_TOKEN = ghToken;
+  }
+
+  jobLog(jobId, `Git author configured: ${gitBotName} <${gitBotEmail}>`);
+}
+
+function getBaseBranch(worktreePath: string): string {
+  const proc = Bun.spawnSync(["git", "rev-parse", "--abbrev-ref", "origin/HEAD"], { cwd: worktreePath });
+  if (proc.exitCode === 0) {
+    const ref = proc.stdout.toString().trim();
+    return ref.replace(/^origin\//, "");
+  }
+  return "main";
+}
+
+async function amendCoauthor(worktreePath: string, jobId: number): Promise<void> {
+  if (!hasCoauthor) return;
+
+  const baseBranch = getBaseBranch(worktreePath);
+
+  const logProc = Bun.spawnSync([
+    "git", "log", `origin/${baseBranch}..HEAD`,
+    "--reverse", "--format=%H",
+  ], { cwd: worktreePath });
+
+  if (logProc.exitCode !== 0) {
+    jobLog(jobId, `Could not find base branch commits (origin/${baseBranch}..HEAD failed) — skipping co-author amendment`);
+    return;
+  }
+
+  const commits = logProc.stdout.toString().trim().split("\n").filter(Boolean);
+  if (commits.length === 0) {
+    jobLog(jobId, `No new commits to amend with Co-authored-by trailer`);
+    return;
+  }
+
+  jobLog(jobId, `Amending ${commits.length} commit(s) with Co-authored-by trailer...`);
+
+  const trailer = `Co-authored-by: ${gitCoauthorName} <${gitCoauthorEmail}>`;
+  const rebaseProc = Bun.spawnSync([
+    "git", "rebase", `origin/${baseBranch}`,
+    "--exec", `git commit --amend --no-edit --trailer "${trailer}"`,
+  ], { cwd: worktreePath });
+
+  if (rebaseProc.exitCode !== 0) {
+    const errMsg = rebaseProc.stderr.toString().slice(0, 300);
+    jobLog(jobId, `Rebase/amend failed: ${errMsg}`);
+    Bun.spawnSync(["git", "rebase", "--abort"], { cwd: worktreePath });
+    return;
+  }
+
+  const pushProc = Bun.spawnSync(["git", "push", "--force-with-lease"], { cwd: worktreePath });
+  if (pushProc.exitCode !== 0) {
+    const errMsg = pushProc.stderr.toString().slice(0, 300);
+    jobLog(jobId, `Force push failed: ${errMsg}`);
+  } else {
+    jobLog(jobId, `Co-authored-by trailer applied and force-pushed`);
+  }
+}
 
 async function runBuildAgent(
   job: Job,
@@ -96,6 +176,11 @@ Always provide options + a recommended answer.`;
   }
 
   jobLog(job.id, `Starting opencode build agent in ${worktreePath}`);
+
+  if (!sessionToResume) {
+    setupGitAuthor(worktreePath, job.id);
+  }
+
   const buildStart = performance.now();
   const buildArgs = ["opencode", "run", "--agent", "build", "--dir", worktreePath];
   if (sessionToResume) {
@@ -105,6 +190,8 @@ Always provide options + a recommended answer.`;
 
   const { sessionId } = await runOpencodeStreaming(job.id, worktreePath, undefined, buildArgs);
   jobLog(job.id, `Build agent finished in ${(performance.now() - buildStart).toFixed(0)}ms, session: ${sessionId}`);
+
+  await amendCoauthor(worktreePath, job.id);
 
   const prView = (() => {
     try {

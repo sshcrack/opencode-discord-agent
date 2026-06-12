@@ -24,9 +24,10 @@ import {
   ReleaseWorkerJobsInput,
   ReleaseWorkerJobsOutput,
   CreateReviewMergeJobInput,
+  CloseJobThreadInput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread, postToThreadWithComponents, renameThread, discordFetch } from "../discord/helpers";
+import { postToThread, postToThreadWithComponents, renameThread, discordFetch, closeThreadForJob } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
 import { showNextQuestion, formatQaBlock } from "../discord/questions";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
@@ -338,6 +339,16 @@ export const appRouter = t.router({
         await postToThreadWithComponents(job.threadId, row);
       }
 
+      return { success: true };
+    }),
+
+  closeJobThread: t.procedure
+    .input(CloseJobThreadInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const job = await prisma.job.findUnique({ where: { id: input.jobId } });
+      if (!job) return { success: false };
+      await closeThreadForJob(job);
       return { success: true };
     }),
 
