@@ -4,8 +4,9 @@ import type { Job } from "./trpc";
 import path from "node:path";
 
 import { jobLog } from "./logging";
+import { execCommand } from "./exec";
 import { trackProcess } from "./processes";
-import { ensureWorktree, ensureFollowupWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
+import { ensureWorktree, ensureFollowupWorktree, cleanupWorktree, getRepoNameWithOwner, setupGitAuthor, getPRBaseBranch } from "./worktree";
 import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
 import { waitForApproval } from "./approval";
@@ -148,6 +149,17 @@ if (cmd === "ask") {
         return;
       }
 
+      // Fetch PR base branch to ensure merge diff is computed correctly
+      const baseBranch = await getPRBaseBranch(repoPath, prUrl, job.id);
+      if (baseBranch !== followUpBranch) {
+        jobLog(job.id, `Resetting worktree to PR base branch: ${baseBranch}`);
+        await execCommand("git", ["fetch", "origin", baseBranch], worktreePath, job.id);
+        await execCommand("git", ["reset", "--hard", `origin/${baseBranch}`], worktreePath, job.id);
+      }
+
+      await setupGitAuthor(worktreePath, job.id);
+      await postInfo(job.id, "Git author configured for fix commits");
+
       const maxIterations = 3;
       let clean = false;
 
@@ -174,11 +186,13 @@ if (cmd === "ask") {
           if (isLastIteration) {
             await client.postStatus.mutate({
               jobId: job.id,
-              message: `⚠️ Max iterations reached (${maxIterations}). ${issueCount} issue(s) remain. Merging anyway.`,
-              level: "info",
+              message: `❌ Review failed — max iterations reached with ${issueCount} unresolved issue(s). PR requires manual attention.`,
+              level: "error",
             });
-            clean = true;
-            break;
+            await client.cancelJob.mutate({ jobId: job.id });
+            cleanupWorktree(repoPath, branch).catch(() => {});
+            Bun.spawnSync(["rm", "-f", helperPath]);
+            return;
           }
 
           await client.postStatus.mutate({

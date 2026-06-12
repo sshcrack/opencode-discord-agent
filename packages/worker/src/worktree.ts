@@ -2,6 +2,18 @@ import { dryRun } from "./env";
 import { jobLog } from "./logging";
 import { execCommand } from "./exec";
 
+async function setupGitAuthor(worktreePath: string, jobId: number): Promise<void> {
+  jobLog(jobId, `Setting git author config in worktree at ${worktreePath}`);
+  try {
+    await execCommand("git", ["config", "user.name", "opencode-bot"], worktreePath, jobId);
+    await execCommand("git", ["config", "user.email", "opencode-bot@users.noreply.github.com"], worktreePath, jobId);
+    jobLog(jobId, "Git author configured as opencode-bot");
+  } catch (err: unknown) {
+    jobLog(jobId, `Failed to set git author config: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error("Git author configuration failed — commits may fail without git config", { cause: err });
+  }
+}
+
 async function ensureWorktree(repoPath: string, branch: string, jobId: number): Promise<string> {
   if (dryRun) {
     jobLog(jobId, `[DRY RUN] Checking existing worktrees for branch ${branch}`);
@@ -45,6 +57,21 @@ async function cleanupWorktree(repoPath: string, branch: string) {
   }
 }
 
+async function getPRBaseBranch(repoPath: string, prUrl: string, jobId: number): Promise<string> {
+  jobLog(jobId, `Fetching base branch for PR ${prUrl}`);
+  try {
+    const baseBranch = (await execCommand(
+      "gh", ["pr", "view", prUrl, "--json", "baseRefName", "--jq", ".baseRefName"], repoPath, jobId,
+    )).trim();
+    jobLog(jobId, `PR base branch: ${baseBranch}`);
+    return baseBranch;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    jobLog(jobId, `Failed to get PR base branch: ${message}, falling back to "main"`);
+    return "main";
+  }
+}
+
 async function getRepoNameWithOwner(repoPath: string): Promise<string> {
   try {
     const out = await execCommand(
@@ -78,9 +105,11 @@ async function ensureFollowupWorktree(repoPath: string, parentBranch: string, ne
   jobLog(jobId, `Fetching parent branch: origin/${parentBranch}`);
   await execCommand("git", ["fetch", "origin", parentBranch], repoPath, jobId);
 
-  const worktreePath = (await execCommand(
-    "gwq", ["add", "-b", newBranch], repoPath, jobId,
-  )).trim();
+  jobLog(jobId, `Running: gwq add -b ${newBranch} (in ${repoPath})`);
+  await execCommand("gwq", ["add", "-b", newBranch], repoPath, jobId);
+
+  jobLog(jobId, `Running: gwq get ${newBranch}`);
+  const worktreePath = (await execCommand("gwq", ["get", newBranch], repoPath, jobId)).trim();
 
   await execCommand("git", ["reset", "--hard", `origin/${parentBranch}`], worktreePath, jobId);
 
@@ -88,4 +117,4 @@ async function ensureFollowupWorktree(repoPath: string, parentBranch: string, ne
   return worktreePath;
 }
 
-export { ensureWorktree, ensureFollowupWorktree, cleanupWorktree, getRepoNameWithOwner };
+export { setupGitAuthor, ensureWorktree, ensureFollowupWorktree, cleanupWorktree, getRepoNameWithOwner, getPRBaseBranch };
