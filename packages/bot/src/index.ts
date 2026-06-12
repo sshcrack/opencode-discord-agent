@@ -72,6 +72,9 @@ client.once(Events.ClientReady, async (c) => {
   // Reconcile repo channels on startup
   try {
     const repos = await prisma.repository.findMany();
+    let createdCount = 0;
+    let boundCount = 0;
+
     for (const repo of repos) {
       if (repo.channelId) {
         try {
@@ -94,10 +97,46 @@ client.once(Events.ClientReady, async (c) => {
               where: { id: repo.id },
               data: { channelId: existing.id },
             });
+            boundCount++;
             console.log(`[Startup] Bound existing channel #${existing.name} (${existing.id}) to repo ${repo.slug}`);
+          } else {
+            // No matching channel exists — create one
+            try {
+              let category = guild.channels.cache.find(
+                ch => ch.name === "Repositories" && ch.type === ChannelType.GuildCategory,
+              );
+              if (!category) {
+                category = await guild.channels.create({
+                  name: "Repositories",
+                  type: ChannelType.GuildCategory,
+                  reason: "Auto-created for startup repo channel sync",
+                });
+                console.log("[Startup] Created Repositories category");
+              }
+
+              const created = await guild.channels.create({
+                name: repo.slug,
+                type: ChannelType.GuildText,
+                parent: category.id,
+                reason: `Auto-created for repository ${repo.slug}`,
+              });
+
+              await prisma.repository.update({
+                where: { id: repo.id },
+                data: { channelId: created.id },
+              });
+              createdCount++;
+              console.log(`[Startup] Created channel #${repo.slug} (${created.id}) for repo ${repo.slug}`);
+            } catch (err) {
+              console.error(`[Startup] Failed to create channel for repo ${repo.slug}:`, err);
+            }
           }
         }
       }
+    }
+
+    if (createdCount > 0 || boundCount > 0) {
+      console.log(`[Startup] Repo channel sync complete — created ${createdCount}, bound ${boundCount}`);
     }
   } catch (err) {
     console.error("[Startup] Repo channel reconciliation error:", err);

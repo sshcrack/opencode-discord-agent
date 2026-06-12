@@ -43,6 +43,11 @@ export class RepoCommand extends Command {
         .addStringOption(o =>
           o.setName("slug").setDescription("Repository slug").setRequired(true).setAutocomplete(true),
         ),
+    )
+    .addSubcommand(
+      new SlashCommandSubcommandBuilder()
+        .setName("sync-channels")
+        .setDescription("Create missing Discord channels for all registered repositories"),
     );
 
   async execute(interaction: CommandInteraction) {
@@ -175,6 +180,70 @@ export class RepoCommand extends Command {
       await prisma.repository.update({ where: { slug }, data: { isDefault: true } });
 
       await interaction.reply(`:white_check_mark: Default repository set to \`${slug}\``);
+    } else if (subcommand === "sync-channels") {
+      if (!interaction.guild) {
+        await interaction.reply({ content: ":x: This command can only be used in a server", ephemeral: true });
+        return;
+      }
+
+      await interaction.deferReply();
+
+      const repos = await prisma.repository.findMany();
+      const guild = await getClient().guilds.fetch(interaction.guild.id);
+
+      // Find or create a "Repositories" category
+      let category = guild.channels.cache.find(
+        ch => ch.name === "Repositories" && ch.type === ChannelType.GuildCategory,
+      );
+      if (!category) {
+        category = await guild.channels.create({
+          name: "Repositories",
+          type: ChannelType.GuildCategory,
+          reason: "Auto-created for repository channel sync",
+        });
+        console.log("[RepoCommand] Created Repositories category");
+      }
+
+      let created = 0;
+      let bound = 0;
+      let skipped = 0;
+
+      for (const repo of repos) {
+        if (repo.channelId) {
+          try {
+            const ch = await guild.channels.fetch(repo.channelId);
+            if (ch) {
+              skipped++;
+              continue;
+            }
+          } catch {
+            // channel no longer exists — will create a new one
+          }
+        }
+
+        const created_ = await guild.channels.create({
+          name: repo.slug,
+          type: ChannelType.GuildText,
+          parent: category.id,
+          reason: `Auto-created for repository ${repo.slug} via sync-channels`,
+        });
+
+        await prisma.repository.update({
+          where: { id: repo.id },
+          data: { channelId: created_.id },
+        });
+
+        created++;
+        console.log(`[RepoCommand] Created channel #${repo.slug} (${created_.id}) for repo ${repo.slug}`);
+      }
+
+      const parts: string[] = [];
+      if (created > 0) parts.push(`created ${created} channel(s)`);
+      if (bound > 0) parts.push(`bound ${bound} existing channel(s)`);
+      if (skipped > 0) parts.push(`${skipped} already had valid channels`);
+      if (created === 0 && bound === 0) parts.push("no changes needed");
+
+      await interaction.editReply(`:white_check_mark: Sync complete — ${parts.join(", ")}.`);
     }
   }
 }
