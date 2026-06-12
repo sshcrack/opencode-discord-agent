@@ -44,6 +44,7 @@ const categories: { name: string; emoji: string; commands: CommandInfo[] }[] = [
     emoji: "\ud83d\udee0\ufe0f",
     commands: [
       { name: "/clear-session", description: "Delete bot messages in the current thread" },
+      { name: "/debug", description: "Generate a debug zip with DB state and full chat log" },
       { name: "/update", description: "Pull latest code and migrate database" },
       { name: "/close", description: "Close and archive the current report thread" },
       { name: "/help", description: "Show this command reference" },

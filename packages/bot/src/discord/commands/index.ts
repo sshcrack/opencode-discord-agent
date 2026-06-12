@@ -16,6 +16,7 @@ import { JobsCommand } from "./jobs";
 import { SettingsCommand } from "./settings";
 import { ReviewMergeCommand } from "./review-merge";
 import { ReviewCommand } from "./review";
+import { DebugCommand } from "./debug";
 
 const commandInstances: Command[] = [
   new RepoCommand(),
@@ -33,6 +34,7 @@ const commandInstances: Command[] = [
   new ResolveCommand(),
   new ReviewMergeCommand(),
   new ReviewCommand(),
+  new DebugCommand(),
 ];
 
 export const commands = commandInstances.map(c => c.data);
