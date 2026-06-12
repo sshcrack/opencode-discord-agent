@@ -14,6 +14,22 @@ async function setupGitAuthor(worktreePath: string, jobId: number): Promise<void
   }
 }
 
+async function deleteStaleBranch(repoPath: string, branch: string, jobId: number): Promise<void> {
+  try {
+    await execCommand("git", ["branch", "-D", branch], repoPath, jobId);
+    jobLog(jobId, `Deleted stale local branch ${branch}`);
+  } catch {
+    // Branch didn't exist locally — that's fine
+  }
+
+  try {
+    await execCommand("git", ["push", "origin", "--delete", branch], repoPath, jobId);
+    jobLog(jobId, `Deleted stale remote branch ${branch}`);
+  } catch {
+    // No remote branch to delete — that's fine
+  }
+}
+
 async function ensureWorktree(repoPath: string, branch: string, jobId: number): Promise<string> {
   if (dryRun) {
     jobLog(jobId, `[DRY RUN] Checking existing worktrees for branch ${branch}`);
@@ -29,6 +45,8 @@ async function ensureWorktree(repoPath: string, branch: string, jobId: number): 
   } catch {
     jobLog(jobId, `Branch ${branch} not found in gwq — creating new worktree`);
   }
+
+  await deleteStaleBranch(repoPath, branch, jobId);
 
   jobLog(jobId, `Running: gwq add -b ${branch} (in ${repoPath})`);
   const addStart = performance.now();
@@ -105,6 +123,8 @@ async function ensureFollowupWorktree(repoPath: string, parentBranch: string, ne
   jobLog(jobId, `Fetching parent branch: origin/${parentBranch}`);
   await execCommand("git", ["fetch", "origin", parentBranch], repoPath, jobId);
 
+  await deleteStaleBranch(repoPath, newBranch, jobId);
+
   jobLog(jobId, `Running: gwq add -b ${newBranch} (in ${repoPath})`);
   await execCommand("gwq", ["add", "-b", newBranch], repoPath, jobId);
 
@@ -139,6 +159,7 @@ async function ensureReviewWorktree(repoPath: string, prNumber: number, jobId: n
   }
 
   // Step 3: Create new worktree with gwq
+  await deleteStaleBranch(repoPath, branch, jobId);
   await execCommand("gwq", ["add", "-b", branch], repoPath, jobId);
   const worktreePath = (await execCommand("gwq", ["get", branch], repoPath, jobId)).trim();
 
