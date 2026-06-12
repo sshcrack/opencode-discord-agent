@@ -3,7 +3,7 @@ import { prisma } from "./db";
 import { registerCommands } from "./deploy-commands";
 import { handleCommand } from "./discord/commands";
 import { handleAutocomplete, handleButton } from "./discord/interactions";
-import { recordAnswer, cancelQuestions } from "./discord/questions";
+import { recordAnswer, cancelQuestions, goBack, approveAnswers, redoQuestions } from "./discord/questions";
 import { createTRPCServer } from "./trpc/server";
 import { checkWorkerOnline } from "./discord/fallback";
 
@@ -248,7 +248,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleAutocomplete(interaction);
     } else if (interaction.isButton()) {
       console.log("[Button] Custom ID:", interaction.customId);
-      if (interaction.customId.startsWith("ask_ans:") || interaction.customId.startsWith("ask_cancel:")) {
+      if (
+        interaction.customId.startsWith("ask_ans:") ||
+        interaction.customId.startsWith("ask_cancel:") ||
+        interaction.customId.startsWith("ask_back:") ||
+        interaction.customId.startsWith("ask_approve:") ||
+        interaction.customId.startsWith("ask_redo:")
+      ) {
         const parts = interaction.customId.split(":");
         const action = parts[0];
         const jobId = parseInt(parts[1]!);
@@ -260,6 +266,25 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (action === "ask_cancel") {
           await interaction.reply({ content: "❌ Cancelled question flow.", ephemeral: true });
           await cancelQuestions(jobId);
+        } else if (action === "ask_back") {
+          const job = await prisma.job.findUnique({ where: { id: jobId } });
+          if (!job || !job.pendingQuestions) {
+            await interaction.reply({ content: ":x: No pending questions.", ephemeral: true });
+            return;
+          }
+          const currentIdx = job.pendingQuestionIndex ?? 0;
+          if (currentIdx <= 0) {
+            await interaction.reply({ content: ":x: Already at the first question.", ephemeral: true });
+            return;
+          }
+          await interaction.reply({ content: "◀ Going back to previous question.", ephemeral: true });
+          await goBack(jobId);
+        } else if (action === "ask_approve") {
+          await interaction.reply({ content: "✅ Answers confirmed, proceeding...", ephemeral: true });
+          await approveAnswers(jobId);
+        } else if (action === "ask_redo") {
+          await interaction.reply({ content: "🔄 Restarting questions from the beginning.", ephemeral: true });
+          await redoQuestions(jobId);
         } else {
           const optionIdx = parseInt(parts[2]!);
           const job = await prisma.job.findUnique({ where: { id: jobId } });

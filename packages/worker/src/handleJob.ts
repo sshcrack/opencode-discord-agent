@@ -341,10 +341,19 @@ async function pollAndInjectAnswers(
       return null;
     }
 
+    if (!status.pendingQuestions) {
+      jobLog(jobId, `Pending questions cleared (${status.status}) — aborting answer wait`);
+      return null;
+    }
+
     if (status.pendingQuestions && status.pendingAnswers) {
       const questions = JSON.parse(status.pendingQuestions);
       const answers = JSON.parse(status.pendingAnswers);
       if (answers.length >= questions.length) {
+        if (status.statusMessageId) {
+          // Overview is still showing — waiting for user to Approve/Redo/Cancel
+          continue;
+        }
         const qaBlock = formatQaBlock(questions, answers);
         jobLog(jobId, `Answers received, injecting into session ${sessionId}`);
         await postInfo(jobId, "✅ Answers received, revising plan...");

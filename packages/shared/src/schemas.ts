@@ -61,6 +61,7 @@ export const JobSchema = z.object({
   pendingQuestions: z.string().nullable(),
   pendingQuestionIndex: z.number().nullable(),
   pendingAnswers: z.string().nullable(),
+  statusMessageId: z.string().nullable(),
 });
 
 export const PollNextJobInput = z.object({
