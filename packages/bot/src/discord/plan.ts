@@ -5,7 +5,7 @@ import {
   ButtonStyle,
 } from "discord.js";
 import { prisma } from "../db";
-import { getClient } from './helpers';
+import { discordFetch } from './helpers';
 import crypto from "node:crypto";
 
 export async function postPlan(
@@ -31,7 +31,7 @@ export async function postPlan(
     )
     .setColor(0x5865f2);
 
-  const ch = await getClient().channels.fetch(job.threadId);
+  const ch = await discordFetch(job.threadId);
   if (!ch) {
     return { success: false, error: "Thread not found" };
   }

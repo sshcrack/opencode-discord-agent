@@ -25,7 +25,7 @@ import {
   ReleaseWorkerJobsOutput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread, renameThread, getClient } from "../discord/helpers";
+import { postToThread, renameThread, discordFetch } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
 import { showNextQuestion, formatQaBlock } from "../discord/questions";
 import type { Job } from "../db/generated/client";
@@ -288,7 +288,7 @@ export const appRouter = t.router({
     .output(StatusResult)
     .mutation(async ({ input }) => {
       try {
-        const channel = await getClient().channels.fetch(input.threadId);
+        const channel = await discordFetch(input.threadId);
         if (channel?.isThread()) {
           await channel.sendTyping();
         }

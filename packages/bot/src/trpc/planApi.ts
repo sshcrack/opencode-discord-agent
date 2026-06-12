@@ -24,8 +24,8 @@ async function verifyToken(jobId: number, token: string | null) {
 
 async function postToThread(threadId: string, message: string) {
   try {
-    const discord = await import("../discord/helpers").then((m) => m.getClient());
-    const ch = await discord.channels.fetch(threadId);
+    const { discordFetch } = await import("../discord/helpers");
+    const ch = await discordFetch(threadId);
     if (ch?.isThread()) {
       await ch.send(message);
     }

@@ -5,7 +5,7 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import { prisma } from "../db";
-import { getClient, postToThread } from "./helpers";
+import { discordFetch, postToThread } from "./helpers";
 
 interface Question {
   q: string;
@@ -82,7 +82,7 @@ async function showNextQuestion(threadId: string, jobId: number, questions: Ques
     rows.push(cancelRow);
   }
 
-  const channel = await getClient().channels.fetch(threadId);
+  const channel = await discordFetch(threadId);
   if (!channel?.isThread()) return;
 
   if (reporterId) {
@@ -112,7 +112,7 @@ async function recordAnswer(jobId: number, answer: string) {
 
   if (job.statusMessageId) {
     try {
-      const channel = await getClient().channels.fetch(job.threadId);
+      const channel = await discordFetch(job.threadId);
       if (channel?.isThread()) {
         const msg = await channel.messages.fetch(job.statusMessageId);
         const embed = EmbedBuilder.from(msg.embeds[0]!).setColor(0x57F287);
@@ -155,7 +155,7 @@ async function cancelQuestions(jobId: number) {
 
   if (job.statusMessageId) {
     try {
-      const channel = await getClient().channels.fetch(job.threadId);
+      const channel = await discordFetch(job.threadId);
       if (channel?.isThread()) {
         const msg = await channel.messages.fetch(job.statusMessageId);
         const embed = EmbedBuilder.from(msg.embeds[0]!).setColor(0xED4245);
