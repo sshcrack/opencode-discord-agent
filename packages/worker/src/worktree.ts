@@ -122,14 +122,22 @@ async function ensureReviewWorktree(repoPath: string, prNumber: number, jobId: n
 
   if (dryRun) {
     jobLog(jobId, `[DRY RUN] Fetching PR #${prNumber} head into refs/heads/${branch}`);
-    jobLog(jobId, `[DRY RUN] gwq add -b ${branch} (in ${repoPath})`);
+    jobLog(jobId, `[DRY RUN] gwq add ${branch} (in ${repoPath})`);
     return { worktreePath: repoPath, branch };
   }
 
-  // Step 1: Fetch PR head as a local branch
+  // Step 1: Delete stale local branch if it exists (from a previous run)
+  try {
+    await execCommand("git", ["branch", "-D", branch], repoPath, jobId);
+    jobLog(jobId, `Deleted stale local branch ${branch}`);
+  } catch {
+    // Branch didn't exist — that's fine
+  }
+
+  // Step 2: Fetch PR head as a local branch
   await execCommand("git", ["fetch", "origin", `pull/${prNumber}/head:refs/heads/${branch}`], repoPath, jobId);
 
-  // Step 2: Reuse existing worktree if it exists
+  // Step 3: Reuse existing worktree if it exists
   try {
     const worktreePath = (await execCommand("gwq", ["get", branch], repoPath, jobId)).trim();
     jobLog(jobId, `Reusing existing worktree at ${worktreePath} for ${branch}`);
@@ -138,8 +146,8 @@ async function ensureReviewWorktree(repoPath: string, prNumber: number, jobId: n
     jobLog(jobId, `No existing worktree for ${branch} — creating new one`);
   }
 
-  // Step 3: Create new worktree with gwq
-  await execCommand("gwq", ["add", "-b", branch], repoPath, jobId);
+  // Step 4: Create new worktree with gwq (branch already exists from fetch)
+  await execCommand("gwq", ["add", branch], repoPath, jobId);
   const worktreePath = (await execCommand("gwq", ["get", branch], repoPath, jobId)).trim();
 
   jobLog(jobId, `PR review worktree ready at ${worktreePath} for ${branch}`);
