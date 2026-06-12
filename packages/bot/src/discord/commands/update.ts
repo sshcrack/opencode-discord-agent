@@ -28,6 +28,12 @@ export class UpdateCommand extends Command {
     const output = pull.stdout.toString().trim();
     const lines: string[] = [];
 
+    // ── Install dependencies ──────────────────────────────────────────────
+    const install = Bun.spawnSync(["bun", "install"], { cwd: gitRoot });
+    if (install.exitCode !== 0) {
+      lines.push(`❌ bun install failed: ${install.stderr.toString().slice(0, 300)}`);
+    }
+
     // ── Save reply channel before disconnect ──────────────────────────────
     await prisma.setting.upsert({
       where: { key: "last_update_channel_id" },
