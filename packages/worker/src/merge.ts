@@ -1,6 +1,6 @@
 import { postInfo } from "./trpc";
 import { jobLog } from "./logging";
-import { dryRun } from "./env";
+import { dryRun, isENOENT, formatENOENT } from "./env";
 import { trackProcess } from "./processes";
 
 interface MergeResult {
@@ -19,10 +19,17 @@ async function mergePR(jobId: number, worktreePath: string, prUrl: string): Prom
   }
 
   jobLog(jobId, `Trying auto-merge: gh pr merge --auto --squash`);
-  const autoProc = trackProcess(Bun.spawn(
-    ["gh", "pr", "merge", prUrl, "--auto", "--squash"],
-    { cwd: worktreePath, stdout: "pipe", stderr: "pipe" },
-  ));
+  const autoProc = (() => {
+    try {
+      return trackProcess(Bun.spawn(
+        ["gh", "pr", "merge", prUrl, "--auto", "--squash"],
+        { cwd: worktreePath, stdout: "pipe", stderr: "pipe" },
+      ));
+    } catch (err: unknown) {
+      if (isENOENT(err)) throw new Error(formatENOENT("gh"), { cause: err });
+      throw err;
+    }
+  })();
   const autoExit = await autoProc.exited;
   const autoStderr = await new Response(autoProc.stderr).text();
 
@@ -34,10 +41,17 @@ async function mergePR(jobId: number, worktreePath: string, prUrl: string): Prom
 
   jobLog(jobId, `Auto-merge failed (exit ${autoExit}): ${autoStderr.slice(0, 300)}, falling back to squash merge`);
 
-  const squashProc = trackProcess(Bun.spawn(
-    ["gh", "pr", "merge", prUrl, "--squash"],
-    { cwd: worktreePath, stdout: "pipe", stderr: "pipe" },
-  ));
+  const squashProc = (() => {
+    try {
+      return trackProcess(Bun.spawn(
+        ["gh", "pr", "merge", prUrl, "--squash"],
+        { cwd: worktreePath, stdout: "pipe", stderr: "pipe" },
+      ));
+    } catch (err: unknown) {
+      if (isENOENT(err)) throw new Error(formatENOENT("gh"), { cause: err });
+      throw err;
+    }
+  })();
   const squashExit = await squashProc.exited;
 
   if (squashExit === 0) {

@@ -1,15 +1,25 @@
 import { jobLog } from "./logging";
 import { trackProcess } from "./processes";
+import { isENOENT, formatENOENT } from "./env";
 
 async function execCommand(cmd: string, args: string[], cwd?: string, jobId?: number): Promise<string> {
   const jId = jobId ?? 0;
   jobLog(jId, `exec: ${cmd} ${args.join(" ")}${cwd ? ` (in ${cwd})` : ""}`);
 
-  const proc = trackProcess(Bun.spawn([cmd, ...args], {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-  }));
+  const proc = (() => {
+    try {
+      return trackProcess(Bun.spawn([cmd, ...args], {
+        cwd,
+        stdout: "pipe",
+        stderr: "pipe",
+      }));
+    } catch (err: unknown) {
+      if (isENOENT(err)) {
+        throw new Error(formatENOENT(cmd), { cause: err });
+      }
+      throw err;
+    }
+  })();
 
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),

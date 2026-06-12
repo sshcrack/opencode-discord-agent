@@ -88,7 +88,13 @@ export const appRouter = t.router({
       });
 
       // Verify worker is on the same git HEAD as the bot
-      const botHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
+      let botHead = "";
+      try {
+        const headProc = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
+        botHead = headProc.stdout.toString().trim();
+      } catch {
+        botHead = "unknown";
+      }
       if (botHead && botHead !== "unknown" && input.gitHead !== botHead) {
         return { jobs: [], gitMismatch: true };
       }
@@ -386,8 +392,14 @@ export const appRouter = t.router({
   getBotHead: t.procedure
     .output(GetBotHeadOutput)
     .query(async () => {
-      const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
-      return { sha: proc.stdout.toString().trim() || "unknown" };
+      let sha = "unknown";
+      try {
+        const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
+        sha = proc.stdout.toString().trim() || "unknown";
+      } catch {
+        sha = "unknown";
+      }
+      return { sha };
     }),
 
   createReviewMergeJob: t.procedure
