@@ -333,6 +333,11 @@ export const appRouter = t.router({
             .setLabel("Review & Merge")
             .setStyle(ButtonStyle.Primary)
             .setEmoji("🔍"),
+          new ButtonBuilder()
+            .setCustomId(`merge_now:${job.id}`)
+            .setLabel("Merge now")
+            .setStyle(ButtonStyle.Success)
+            .setEmoji("🚀"),
         );
         await postToThreadWithComponents(job.threadId, row);
       }
