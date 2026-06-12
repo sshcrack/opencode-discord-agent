@@ -24,6 +24,7 @@ import {
   ReleaseWorkerJobsInput,
   ReleaseWorkerJobsOutput,
   CreateReviewMergeJobInput,
+  CloseJobThreadInput,
 } from "./schemas";
 
 const t = initTRPC.create();
@@ -149,6 +150,13 @@ export const appRouter = t.router({
 
   createReviewMergeJob: t.procedure
     .input(CreateReviewMergeJobInput)
+    .output(StatusResult)
+    .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  closeJobThread: t.procedure
+    .input(CloseJobThreadInput)
     .output(StatusResult)
     .mutation(async () => {
       throw new Error("Not implemented in shared package");

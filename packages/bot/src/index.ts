@@ -4,6 +4,7 @@ import { registerCommands } from "./deploy-commands";
 import { handleCommand } from "./discord/commands";
 import { handleAutocomplete, handleButton } from "./discord/interactions";
 import { recordAnswer, cancelQuestions, goBack, approveAnswers, redoQuestions } from "./discord/questions";
+import { closeThreadForJob, parsePrUrl } from "./discord/helpers";
 import { createTRPCServer } from "./trpc/server";
 import { checkWorkerOnline } from "./discord/fallback";
 import { botLog, botWarn, botError } from "./logging";
@@ -208,6 +209,51 @@ client.once(Events.ClientReady, async (c) => {
         });
         if (result.count > 0) {
           botLog(`[Stale-job sweep] Released ${result.count} job(s) from dead workers: ${staleWorkerIds.join(", ")}`);
+        }
+      }
+
+      // ── Auto-merge PR check: close threads for merged PRs ──────────────
+      const mergedJobs = await prisma.job.findMany({
+        where: {
+          status: "done",
+          prUrl: { not: null },
+          mergedAt: null,
+          thread: { closedAt: null },
+        },
+      });
+
+      for (const job of mergedJobs) {
+        if (!job.prUrl) continue;
+        const parsed = parsePrUrl(job.prUrl);
+        if (!parsed) {
+          botWarn(`[Merge check] Could not parse PR URL: ${job.prUrl}`);
+          continue;
+        }
+        const repoArg = `${parsed.owner}/${parsed.repo}`;
+        const prNum = parsed.prNumber;
+
+        try {
+          const ghProc = Bun.spawn([
+            "gh", "pr", "view", String(prNum),
+            "--repo", repoArg,
+            "--json", "state,mergedAt",
+            "--jq", '.state + "|" + .mergedAt',
+          ], { stdout: "pipe", stderr: "pipe" });
+          const output = await new Response(ghProc.stdout).text();
+          const exitCode = await ghProc.exited;
+
+          if (exitCode !== 0) continue;
+
+          const parts = output.trim().split("|");
+          const state = parts[0];
+          const mergedAt = parts[1];
+
+          if (state === "MERGED" && mergedAt && mergedAt !== "null") {
+            botLog(`[Merge check] PR merged for job #${job.id}: ${job.prUrl} — closing thread`);
+            await closeThreadForJob({ id: job.id, threadId: job.threadId });
+          }
+        } catch (err) {
+          botWarn(`[Merge check] Failed to check PR for job #${job.id}:`, err);
         }
       }
     } catch (err) {

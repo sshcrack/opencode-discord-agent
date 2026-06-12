@@ -82,3 +82,34 @@ export async function renameThread(threadId: string, name: string) {
     botError(`Failed to rename thread ${threadId}:`, err);
   }
 }
+
+export async function closeThreadForJob(job: { id: number; threadId: string }) {
+  const thread = await prisma.reportThread.findUnique({ where: { threadId: job.threadId } });
+  if (!thread || thread.closedAt) return;
+
+  await prisma.job.update({
+    where: { id: job.id },
+    data: { mergedAt: new Date() },
+  });
+
+  await prisma.reportThread.update({
+    where: { id: thread.id },
+    data: { closedAt: new Date() },
+  });
+
+  const channel = await discordFetch(job.threadId);
+  const threadName = channel?.isThread() ? channel.name : null;
+  if (threadName) {
+    const prefix = threadName.startsWith("[Closed] ") ? "" : "[Closed] ";
+    await renameThread(job.threadId, `${prefix}${threadName}`).catch(() => {});
+  }
+
+  await closeThread(job.threadId);
+  await postToThread(job.threadId, "✅ PR merged — thread closed automatically");
+}
+
+export function parsePrUrl(url: string): { owner: string; repo: string; prNumber: number } | null {
+  const match = url.match(/github\.com\/([^/]+)\/([^/]+?)\/pull\/(\d+)/);
+  if (!match) return null;
+  return { owner: match[1]!, repo: match[2]!.replace(/\.git$/, ""), prNumber: parseInt(match[3]!) };
+}
