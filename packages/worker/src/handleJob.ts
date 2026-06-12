@@ -296,35 +296,45 @@ if (cmd === "ask") {
       return;
     }
 
-    // ── Step 2: Issue generation (skip for follow-ups) ────────────────────
+    // ── Step 2: Issue generation ──────────────────────────────────────────
     let issueNumber = job.issueNumber ?? followUpIssueNumber;
+    let issueTitle = "";
 
-    if (!issueNumber && !isFollowUp) {
-      jobLog(job.id, "Step 2/5: Generating GitHub issue...");
+    if (issueNumber) {
+      jobLog(job.id, `Using existing issue #${issueNumber}${isFollowUp ? " (from parent job)" : ""}`);
+    } else if (job.quickMode || isFollowUp) {
+      // Quick mode or follow-up: generate issue synchronously before the build agent
+      jobLog(job.id, job.quickMode ? "Step 2/5: Generating GitHub issue (quick mode)..." : "Generating GitHub issue (follow-up)...");
       await postInfo(job.id, "Generating GitHub issue...");
-
       const stepStart = performance.now();
-      const { issueNumber: genIssueNumber, issueTitle } = await generateIssue(job, repoPath);
-      issueNumber = genIssueNumber;
+      const gen = await generateIssue(job, repoPath);
+      issueNumber = gen.issueNumber;
+      issueTitle = gen.issueTitle;
       jobLog(job.id, `Issue generation completed in ${(performance.now() - stepStart).toFixed(0)}ms, issue #${issueNumber ?? "N/A"}`);
+    } else {
+      // Non-quick mode: delegate issue creation to the plan agent
+      jobLog(job.id, "Issue creation delegated to plan agent (non-quick mode)");
+    }
 
-      if (issueNumber !== null) {
-        await client.setIssueNumber.mutate({ jobId: job.id, issueNumber }).catch(() => {});
-        const repoNameWithOwner = dryRun ? "" : await getRepoNameWithOwner(repoPath);
-        const issueUrl = repoNameWithOwner
-          ? `https://github.com/${repoNameWithOwner}/issues/${issueNumber}`
-          : `issue #${issueNumber}`;
-        jobLog(job.id, `Issue URL: ${issueUrl}`);
+    if (issueNumber !== null && !isFollowUp) {
+      await client.setIssueNumber.mutate({ jobId: job.id, issueNumber }).catch(() => {});
+    }
+
+    // Post created issue URL to thread
+    if (issueNumber && issueTitle) {
+      const repoNameWithOwner = dryRun ? "" : await getRepoNameWithOwner(repoPath);
+      const issueUrl = repoNameWithOwner
+        ? `https://github.com/${repoNameWithOwner}/issues/${issueNumber}`
+        : `issue #${issueNumber}`;
+      if (issueTitle) {
+        const threadName = `#${issueNumber} ${issueTitle.replace(/^#+\s*/, "").trim()}`.slice(0, 100);
+        await client.renameJobThread.mutate({ jobId: job.id, name: threadName }).catch(() => {});
         await client.postStatus.mutate({
           jobId: job.id,
           message: `Issue created: ${issueUrl}`,
           level: "success",
         });
-        const threadName = `#${issueNumber} ${issueTitle.replace(/^#+\s*/, "").trim()}`.slice(0, 100);
-        await client.renameJobThread.mutate({ jobId: job.id, name: threadName }).catch(() => {});
       }
-    } else if (issueNumber) {
-      jobLog(job.id, `Using existing issue #${issueNumber}${isFollowUp ? " (from parent job)" : ""}`);
     }
 
     // Rename thread for pre-existing issues (was never renamed at creation)
@@ -369,8 +379,36 @@ if (cmd === "ask") {
       await postInfo(job.id, "Planning started — running opencode plan agent...");
 
       const planStart = performance.now();
-      let { planMd, sessionId } = await runPlanAgent(job, worktreePath, issueNumber, helperPath);
+      const planAgentResult = await runPlanAgent(job, worktreePath, issueNumber, helperPath);
+      let { planMd, sessionId } = planAgentResult;
+      const { issueNumber: planIssueNumber } = planAgentResult;
       jobLog(job.id, `Plan agent completed in ${(performance.now() - planStart).toFixed(0)}ms, session: ${sessionId}, plan length: ${planMd.length} chars`);
+
+      // If plan agent created an issue, capture and post it
+      if (planIssueNumber && !issueNumber) {
+        issueNumber = planIssueNumber;
+        await client.setIssueNumber.mutate({ jobId: job.id, issueNumber }).catch(() => {});
+        const repoNameWithOwner = dryRun ? "" : await getRepoNameWithOwner(repoPath);
+        const issueUrl = repoNameWithOwner
+          ? `https://github.com/${repoNameWithOwner}/issues/${issueNumber}`
+          : `issue #${issueNumber}`;
+        await client.postStatus.mutate({
+          jobId: job.id,
+          message: `Issue created: ${issueUrl}`,
+          level: "success",
+        });
+      }
+
+      // Fall back to model-based issue generation if plan agent didn't create one
+      if (!issueNumber) {
+        jobLog(job.id, "Plan agent did not create an issue — falling back to model-based generation...");
+        await postInfo(job.id, "Falling back to model-based issue generation...");
+        const gen = await generateIssue(job, repoPath);
+        issueNumber = gen.issueNumber;
+        if (issueNumber) {
+          await client.setIssueNumber.mutate({ jobId: job.id, issueNumber }).catch(() => {});
+        }
+      }
 
       // Check if the agent asked questions — if so, wait for answers and inject them
       if (!job.autoMode && sessionId) {

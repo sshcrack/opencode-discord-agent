@@ -4,14 +4,30 @@ import { postInfo } from "./trpc";
 import type { Job } from "./trpc";
 import { jobLog } from "./logging";
 import { runOpencodeStreaming } from "./opencode";
+import { getRepoNameWithOwner } from "./worktree";
 
 async function runPlanAgent(
   job: Job,
   worktreePath: string,
   issueNumber: number | null,
   helperPath: string,
-): Promise<{ planMd: string; sessionId: string }> {
-  const issueRef = issueNumber ? ` The related GitHub issue is #${issueNumber}.` : "";
+): Promise<{ planMd: string; sessionId: string; issueNumber: number | null }> {
+  const repoName = await getRepoNameWithOwner(worktreePath).catch(() => "");
+
+  const issueRef = issueNumber
+    ? ` The related GitHub issue is #${issueNumber} — make sure the PR body contains "Closes #${issueNumber}".`
+    : "";
+
+  const createIssueBlock = issueNumber
+    ? ""
+    : `\n\nFirst, create a GitHub issue by running:
+\`\`\`
+gh issue create --title "Descriptive title summarizing the ${job.kind}" --body "Detailed issue body from the context below" ${repoName ? `--repo ${repoName}` : ""}
+\`\`\`
+
+The \`gh\` command will output the issue URL like \`https://github.com/owner/repo/issues/N\`. Note this issue number — it will be referenced in the next build step.
+After creating the issue, write the plan below.`;
+
   const contextBlock = job.context
     ? `\n\nThe following is the Discord report thread context with file attachments:\n${job.context}`
     : "";
@@ -49,6 +65,7 @@ If you do NOT have questions, ${writeInstruction.toLowerCase()} Always provide o
     `Review the codebase and write a detailed implementation plan.`,
     `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
     `The plan should cover: files to change, approach, and any risk areas.`,
+    createIssueBlock,
     job.autoMode ? writeInstruction : "",
     contextBlock,
     helperBlock,
@@ -61,11 +78,12 @@ If you do NOT have questions, ${writeInstruction.toLowerCase()} Always provide o
     jobLog(job.id, `[DRY RUN] Prompt: ${prompt.slice(0, 200)}...`);
     jobLog(job.id, `[DRY RUN] Would run: opencode run --agent plan --print ...`);
     await postInfo(job.id, `[DRY RUN] Plan agent skipped — prompt logged to worker console`);
-    return { planMd: "# DRY RUN — plan generation skipped", sessionId: `dry-run-${job.id}` };
+    return { planMd: "# DRY RUN — plan generation skipped", sessionId: `dry-run-${job.id}`, issueNumber: null };
   }
 
   jobLog(job.id, `Starting opencode plan agent in ${worktreePath}`);
-  return runOpencodeStreaming(job.id, worktreePath, planFilePath, ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt]);
+  const result = await runOpencodeStreaming(job.id, worktreePath, planFilePath, ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt]);
+  return { planMd: result.planMd, sessionId: result.sessionId, issueNumber: result.issueNumber ?? issueNumber };
 }
 
 export { runPlanAgent };

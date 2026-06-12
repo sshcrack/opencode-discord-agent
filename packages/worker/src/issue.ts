@@ -13,11 +13,15 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
     jobLog(job.id, `Context available: ${!!job.context}, context length: ${job.context?.length ?? 0} chars`);
 
     const prompt = [
-      `Create a well-structured GitHub issue for the following ${job.kind} report.`,
+      `Create a GitHub issue for the following ${job.kind} report.`,
       `Repository: ${job.repoSlug}`,
       ``,
-      `# CRITICAL — Output format:`,
-      `Wrap your issue in <issue> tags. Everything outside the tags is ignored.`,
+      `Run the following command to create the issue:`,
+      `gh issue create --title "A descriptive title" --body "The issue body in Markdown" --label "${job.kind}"`,
+      ``,
+      `The \`gh\` command will output the issue URL. This is critical — the URL must be captured.`,
+      ``,
+      `If you cannot run \`gh issue create\`, output the issue in this format instead:`,
       `<issue>`,
       `  <title>The issue title here</title>`,
       `  <description>`,
@@ -48,7 +52,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
     const proc = (() => {
       try {
         return trackProcess(Bun.spawn(
-          ["opencode", "run", "--model", issueModel, "--dir", repoPath, prompt, "--format", "json", ...skipPermissionsArg],
+          ["opencode", "run", "--agent", "build", "--model", issueModel, "--dir", repoPath, prompt, "--format", "json", ...skipPermissionsArg],
           { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
         ));
       } catch (err: unknown) {
@@ -114,11 +118,20 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
       return { issueNumber: null, issueTitle: "" };
     }
 
-    const issueMatch = issueText.match(/<issue>([\s\S]*?)<\/issue>/i);
+    const repoNameWithOwner = await getRepoNameWithOwner(repoPath);
+
+    const issueMatch = issueText.match(/https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/(\d+)/);
+    if (issueMatch) {
+      const num = parseInt(issueMatch[1]!, 10);
+      jobLog(job.id, `Agent created issue #${num}`);
+      return { issueNumber: num, issueTitle: "" };
+    }
+
+    const xmlMatch = issueText.match(/<issue>([\s\S]*?)<\/issue>/i);
     let title: string;
     let body: string;
-    if (issueMatch?.[1]) {
-      const inner = issueMatch[1];
+    if (xmlMatch?.[1]) {
+      const inner = xmlMatch[1];
       const titleMatch = inner.match(/<title>([\s\S]*?)<\/title>/i);
       const bodyMatch = inner.match(/<description>([\s\S]*?)<\/description>/i);
       title = titleMatch?.[1]?.trim() || `[${job.repoSlug}] ${job.kind} report`;
@@ -132,7 +145,6 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
     jobLog(job.id, `Issue title: ${title.slice(0, 80)}${title.length > 80 ? "..." : ""}`);
     jobLog(job.id, `Issue body length: ${body.length} chars`);
 
-    const repoNameWithOwner = await getRepoNameWithOwner(repoPath);
     const ghArgs = [
       "issue", "create",
       "--title", title,
