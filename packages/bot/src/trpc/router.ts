@@ -67,6 +67,7 @@ function toJobOutput(job: Job) {
     pendingQuestions: job.pendingQuestions ?? null,
     pendingQuestionIndex: job.pendingQuestionIndex ?? null,
     pendingAnswers: job.pendingAnswers ?? null,
+    statusMessageId: job.statusMessageId ?? null,
   };
 }
 
