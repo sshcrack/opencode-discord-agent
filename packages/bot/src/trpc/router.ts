@@ -74,6 +74,8 @@ function toJobOutput(job: Job) {
   };
 }
 
+const ACTIVE_STATUSES: Job["status"][] = ["claimed", "planning", "plan_ready", "approved", "building"];
+
 const t = initTRPC.create();
 
 export const appRouter = t.router({
@@ -105,15 +107,13 @@ export const appRouter = t.router({
         orderBy: { createdAt: "asc" },
       });
 
-      const activeStatuses: Job["status"][] = ["claimed", "planning", "plan_ready", "approved", "building"];
-
       const claimed = [];
       for (const job of pending) {
         // Only one active job per thread — skip if this thread already has one
         const existingActive = await prisma.job.findFirst({
           where: {
             threadId: job.threadId,
-            status: { in: activeStatuses },
+            status: { in: ACTIVE_STATUSES },
             id: { not: job.id },
           },
         });
@@ -185,8 +185,6 @@ export const appRouter = t.router({
 
       // Debug messages only show when verbose is on
       if (input.level === "debug" && !verbose) return { success: true };
-      // Info messages hidden when verbose is off
-      if (input.level === "info" && !verbose) return { success: true };
 
       const emoji =
         input.level === "info" ? "ℹ️" :
@@ -443,7 +441,7 @@ export const appRouter = t.router({
       const result = await prisma.job.updateMany({
         where: {
           workerId: input.workerId,
-          status: { in: ["claimed", "planning", "plan_ready", "approved", "building"] },
+          status: { in: ACTIVE_STATUSES },
         },
         data: {
           status: "pending",

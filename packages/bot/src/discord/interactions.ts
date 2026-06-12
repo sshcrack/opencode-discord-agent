@@ -71,10 +71,11 @@ export async function handleButton(interaction: ButtonInteraction) {
       embeds: [],
     });
   } else if (action === "suggest") {
-    await interaction.update({
+    // Acknowledge immediately; do NOT destroy the original plan embed yet —
+    // we only clear it after a suggestion is actually received.
+    await interaction.reply({
       content: "✏️ Please reply in this thread with your suggestion for the plan revision.",
-      components: [],
-      embeds: [],
+      ephemeral: true,
     });
 
     const filter = (m: Message) => !m.author.bot && m.author.id === interaction.user.id;
@@ -92,16 +93,15 @@ export async function handleButton(interaction: ButtonInteraction) {
         data: { status: "planning", pendingSuggestion: suggestion },
       });
 
-      await interaction.followUp(
-        `🔄 Forwarding suggestion to worker: "${suggestion}"`,
-      );
+      // Now clear the original plan message components to prevent double-clicks
+      await interaction.editReply({ content: `🔄 Forwarding suggestion to worker: "${suggestion}"` }).catch(() => {});
     });
 
     collector.on("end", collected => {
       if (collected.size === 0) {
         interaction
-          .followUp({ content: "⏰ No suggestion received within 5 minutes.", ephemeral: true })
-          .catch(() => { });
+          .editReply({ content: "⏰ No suggestion received within 5 minutes." })
+          .catch(() => {});
       }
     });
   } else if (action === "review_merge") {

@@ -206,7 +206,7 @@ export class RepoCommand extends Command {
       }
 
       let created = 0;
-      const bound = 0;
+      let bound = 0;
       let skipped = 0;
 
       for (const repo of repos) {
@@ -220,6 +220,20 @@ export class RepoCommand extends Command {
           } catch {
             // channel no longer exists — will create a new one
           }
+        }
+
+        // Check if a channel already exists with this name and bind it
+        const existing = guild.channels.cache.find(
+          ch => ch.name === repo.slug && ch.type === ChannelType.GuildText,
+        );
+        if (existing) {
+          await prisma.repository.update({
+            where: { id: repo.id },
+            data: { channelId: existing.id },
+          });
+          bound++;
+          botLog(`[RepoCommand] Bound existing channel #${existing.name} (${existing.id}) to repo ${repo.slug}`);
+          continue;
         }
 
         const created_ = await guild.channels.create({
@@ -242,7 +256,7 @@ export class RepoCommand extends Command {
       if (created > 0) parts.push(`created ${created} channel(s)`);
       if (bound > 0) parts.push(`bound ${bound} existing channel(s)`);
       if (skipped > 0) parts.push(`${skipped} already had valid channels`);
-      if (created === 0 && bound === 0) parts.push("no changes needed");
+      if (created === 0 && bound === 0 && skipped === repos.length) parts.push("no changes needed");
 
       await interaction.editReply(`:white_check_mark: Sync complete — ${parts.join(", ")}.`);
     }

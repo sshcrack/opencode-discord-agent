@@ -27,6 +27,14 @@ function formatQaBlock(questions: Question[], answers: QaPair[]): string {
     .join("\n\n");
 }
 
+function safeParseJson<T>(data: string, fallback: T): T {
+  try {
+    return JSON.parse(data) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 async function showNextQuestion(
   threadId: string,
   jobId: number,
@@ -161,11 +169,12 @@ async function recordAnswer(jobId: number, answer: string) {
   const job = await prisma.job.findUnique({ where: { id: jobId } });
   if (!job || !job.pendingQuestions) return;
 
-  const questions: Question[] = JSON.parse(job.pendingQuestions);
+  const questions: Question[] = safeParseJson<Question[]>(job.pendingQuestions, []);
   if (questions.length === 0) return;
-  const pendingAnswers: QaPair[] = job.pendingAnswers ? JSON.parse(job.pendingAnswers) : [];
+  const pendingAnswers: QaPair[] = safeParseJson<QaPair[]>(job.pendingAnswers ?? "[]", []);
   const currentIdx = job.pendingQuestionIndex ?? 0;
-  const question = questions[currentIdx]!;
+  const question = questions[currentIdx];
+  if (!question) return;
 
   pendingAnswers.push({ q: question.q, a: answer });
   const nextIdx = currentIdx + 1;
@@ -217,8 +226,8 @@ async function goBack(jobId: number) {
   const job = await prisma.job.findUnique({ where: { id: jobId } });
   if (!job || !job.pendingQuestions) return;
 
-  const questions: Question[] = JSON.parse(job.pendingQuestions);
-  const pendingAnswers: QaPair[] = job.pendingAnswers ? JSON.parse(job.pendingAnswers) : [];
+  const questions: Question[] = safeParseJson<Question[]>(job.pendingQuestions, []);
+  const pendingAnswers: QaPair[] = safeParseJson<QaPair[]>(job.pendingAnswers ?? "[]", []);
   const currentIdx = job.pendingQuestionIndex ?? 0;
 
   if (currentIdx <= 0) return;
@@ -271,7 +280,7 @@ async function redoQuestions(jobId: number) {
   const job = await prisma.job.findUnique({ where: { id: jobId } });
   if (!job || !job.pendingQuestions) return;
 
-  const questions: Question[] = JSON.parse(job.pendingQuestions);
+  const questions: Question[] = safeParseJson<Question[]>(job.pendingQuestions, []);
 
   // Clear the overview embed
   if (job.statusMessageId) {

@@ -15,6 +15,11 @@ import { runReviewAgent } from "./review";
 import { mergePR } from "./merge";
 import { runOpencodeStreaming } from "./opencode";
 
+/** Remove temp file, swallowing errors */
+function cleanupHelper(helperPath: string) {
+  if (helperPath) Bun.spawnSync(["rm", "-f", helperPath]);
+}
+
 async function handleJob(job: Job) {
   const repoPath = job.repoPath;
   if (!repoPath) {
@@ -172,6 +177,7 @@ if (cmd === "ask") {
         await client.postStatus.mutate({ jobId: job.id, message: "No PR URL available for review", level: "error" });
         await client.cancelJob.mutate({ jobId: job.id });
         cleanupWorktree(repoPath, branch).catch(() => {});
+        cleanupHelper(helperPath);
         return;
       }
 
@@ -217,7 +223,7 @@ if (cmd === "ask") {
             });
             await client.cancelJob.mutate({ jobId: job.id });
             cleanupWorktree(repoPath, branch).catch(() => {});
-            Bun.spawnSync(["rm", "-f", helperPath]);
+            cleanupHelper(helperPath);
             return;
           }
 
@@ -286,7 +292,7 @@ if (cmd === "ask") {
       }
 
       cleanupWorktree(repoPath, branch).catch(() => {});
-      Bun.spawnSync(["rm", "-f", helperPath]);
+      cleanupHelper(helperPath);
       return;
     }
 
@@ -422,7 +428,7 @@ if (cmd === "ask") {
           level: "error",
         });
         cleanupWorktree(repoPath, branch).catch(() => {});
-        Bun.spawnSync(["rm", "-f", helperPath]);
+        cleanupHelper(helperPath);
         return;
       }
       jobLog(job.id, `Approval received, session: ${finalSessionId}`);
@@ -466,13 +472,13 @@ if (cmd === "ask") {
     }
 
     cleanupWorktree(repoPath, branch).catch(() => {});
+    cleanupHelper(helperPath);
   } catch (err: unknown) {
     const elapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
     const message = err instanceof Error ? err.message : String(err);
     jobLog(job.id, `Job FAILED after ${elapsed}s: ${message}`);
     if (err instanceof Error && err.stack) jobLog(job.id, `Stack: ${err.stack}`);
-    jobLog(job.id, String(err));
-    if (helperPath) Bun.spawnSync(["rm", "-f", helperPath]);
+    cleanupHelper(helperPath);
 
     const displayMessage = isENOENT(err)
       ? `Job failed: ${message}\n💡 This usually means a required tool is missing from PATH. Check that git, gh, gwq, opencode, and bun are installed and accessible. Current PATH: ${AUGMENTED_PATH}`
@@ -487,7 +493,6 @@ if (cmd === "ask") {
 
   const totalElapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
   jobLog(job.id, `Job finished in ${totalElapsed}s`);
-  Bun.spawnSync(["rm", "-f", helperPath]);
 }
 
 function formatQaBlock(
@@ -517,25 +522,29 @@ async function pollAndInjectAnswers(
     const status = await client.getJobStatus.query({ jobId, workerId: WORKER_ID }).catch(() => null);
     if (!status) continue;
 
-    if (status.status === "failed" || status.status === "cancelled") {
+    if (status.status === "failed" || status.status === "cancelled" || status.status === "done") {
       jobLog(jobId, `Job ${status.status} while waiting for answers, aborting`);
       return null;
     }
 
+    // Questions were cleared externally (e.g. cancelQuestions)
     if (!status.pendingQuestions) {
-      jobLog(jobId, `Pending questions cleared (${status.status}) — aborting answer wait`);
+      jobLog(jobId, `Pending questions cleared — aborting answer wait`);
       return null;
     }
 
-    if (status.pendingQuestions && status.pendingAnswers) {
-      const questions = JSON.parse(status.pendingQuestions);
-      const answers = JSON.parse(status.pendingAnswers);
+    if (status.pendingAnswers) {
+      const questions = JSON.parse(status.pendingQuestions) as unknown[];
+      const answers = JSON.parse(status.pendingAnswers) as unknown[];
       if (answers.length >= questions.length) {
         if (status.statusMessageId) {
           // Overview is still showing — waiting for user to Approve/Redo/Cancel
           continue;
         }
-        const qaBlock = formatQaBlock(questions, answers);
+        const qaBlock = formatQaBlock(
+          questions as { q: string; options: string[]; recommended: number }[],
+          answers as { q: string; a: string }[],
+        );
         jobLog(jobId, `Answers received, injecting into session ${sessionId}`);
         await postInfo(jobId, "✅ Answers received, revising plan...");
 

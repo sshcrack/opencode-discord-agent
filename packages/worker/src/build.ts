@@ -14,18 +14,9 @@ import type { Job } from "./trpc";
 import { jobLog } from "./logging";
 import { runOpencodeStreaming } from "./opencode";
 
-function setupGitAuthor(worktreePath: string, jobId: number) {
+function configureGitEnv(worktreePath: string, jobId: number) {
   Bun.spawnSync(["git", "config", "user.name", gitBotName], { cwd: worktreePath });
   Bun.spawnSync(["git", "config", "user.email", gitBotEmail], { cwd: worktreePath });
-
-  process.env.GIT_AUTHOR_NAME = gitBotName;
-  process.env.GIT_AUTHOR_EMAIL = gitBotEmail;
-  process.env.GIT_COMMITTER_NAME = gitBotName;
-  process.env.GIT_COMMITTER_EMAIL = gitBotEmail;
-
-  if (ghToken) {
-    process.env.GH_TOKEN = ghToken;
-  }
 
   jobLog(jobId, `Git author configured: ${gitBotName} <${gitBotEmail}>`);
 }
@@ -178,7 +169,14 @@ Always provide options + a recommended answer.`;
   jobLog(job.id, `Starting opencode build agent in ${worktreePath}`);
 
   if (!sessionToResume) {
-    setupGitAuthor(worktreePath, job.id);
+    configureGitEnv(worktreePath, job.id);
+    if (ghToken) {
+      process.env.GH_TOKEN = ghToken;
+    }
+    process.env.GIT_AUTHOR_NAME = gitBotName;
+    process.env.GIT_AUTHOR_EMAIL = gitBotEmail;
+    process.env.GIT_COMMITTER_NAME = gitBotName;
+    process.env.GIT_COMMITTER_EMAIL = gitBotEmail;
   }
 
   const buildStart = performance.now();
