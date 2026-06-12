@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, CommandInteraction } from "discord.js";
 import { prisma } from "../../db";
-import { closeThread } from "../helpers";
+import { closeThread, renameThread } from "../helpers";
 import { Command } from "./Command";
 
 export class CloseCommand extends Command {
@@ -50,9 +50,7 @@ export class CloseCommand extends Command {
       data: { closedAt: new Date() },
     });
 
-    // Lock and archive the Discord thread
-    await closeThread(thread.id);
-
+    // Send messages BEFORE locking the thread
     const cancelMsg = activeJobs.length > 0
       ? ` Cancelled ${activeJobs.length} active job(s).`
       : "";
@@ -64,5 +62,16 @@ export class CloseCommand extends Command {
     } else {
       await thread.send(":lock: Thread closed.");
     }
+
+    // Rename thread to indicate closed state
+    try {
+      const prefix = thread.name.startsWith("[Closed] ") ? "" : "[Closed] ";
+      await renameThread(thread.id, `${prefix}${thread.name}`);
+    } catch {
+      // Renaming is non-critical
+    }
+
+    // Lock and archive the Discord thread (must be after messages are sent)
+    await closeThread(thread.id);
   }
 }
