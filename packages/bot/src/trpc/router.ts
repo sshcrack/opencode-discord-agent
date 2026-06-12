@@ -23,11 +23,13 @@ import {
   PollNextJobOutput,
   ReleaseWorkerJobsInput,
   ReleaseWorkerJobsOutput,
+  CreateReviewMergeJobInput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread, renameThread, discordFetch } from "../discord/helpers";
+import { postToThread, postToThreadWithComponents, renameThread, discordFetch } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
 import { showNextQuestion, formatQaBlock } from "../discord/questions";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import type { Job } from "../db/generated/client";
 
 function parseQuestions(
@@ -319,6 +321,17 @@ export const appRouter = t.router({
       await postToThread(job.threadId, `✅ PR created: ${input.prUrl}`);
       await postToThread(job.threadId, `✅ Job complete! <@${job.reporterId}> your PR is ready!`);
 
+      if (input.prUrl) {
+        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`review_merge:${job.id}`)
+            .setLabel("Review & Merge")
+            .setStyle(ButtonStyle.Primary)
+            .setEmoji("🔍"),
+        );
+        await postToThreadWithComponents(job.threadId, row);
+      }
+
       return { success: true };
     }),
 
@@ -375,6 +388,29 @@ export const appRouter = t.router({
     .query(async () => {
       const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
       return { sha: proc.stdout.toString().trim() || "unknown" };
+    }),
+
+  createReviewMergeJob: t.procedure
+    .input(CreateReviewMergeJobInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const parentJob = await prisma.job.findUnique({ where: { id: input.parentJobId } });
+      if (!parentJob || !parentJob.prUrl) return { success: false };
+
+      await prisma.job.create({
+        data: {
+          threadId: input.threadId,
+          repoSlug: parentJob.repoSlug,
+          kind: "other",
+          status: "pending",
+          context: "review-merge",
+          autoMode: true,
+          quickMode: true,
+          parentJobId: input.parentJobId,
+        },
+      });
+
+      return { success: true };
     }),
 
   releaseWorkerJobs: t.procedure

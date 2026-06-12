@@ -13,6 +13,7 @@ import { ResolveCommand } from "./resolve";
 import { HelpCommand } from "./help";
 import { JobsCommand } from "./jobs";
 import { SettingsCommand } from "./settings";
+import { ReviewMergeCommand } from "./review-merge";
 
 const commandInstances: Command[] = [
   new RepoCommand(),
@@ -28,6 +29,7 @@ const commandInstances: Command[] = [
   new UpdateCommand(),
   new CloseCommand(),
   new ResolveCommand(),
+  new ReviewMergeCommand(),
 ];
 
 export const commands = commandInstances.map(c => c.data);
