@@ -9,6 +9,7 @@ import { ClearSessionCommand } from "./clear-session";
 import { SetQuickCommand } from "./set-quick";
 import { UpdateCommand } from "./update";
 import { CloseCommand } from "./close";
+import { ResolveCommand } from "./resolve";
 
 const commandInstances: Command[] = [
   new RepoCommand(),
@@ -20,6 +21,7 @@ const commandInstances: Command[] = [
   new ClearSessionCommand(),
   new UpdateCommand(),
   new CloseCommand(),
+  new ResolveCommand(),
 ];
 
 export const commands = commandInstances.map(c => c.data);
