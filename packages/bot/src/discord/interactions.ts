@@ -1,7 +1,8 @@
 import { AutocompleteInteraction, ButtonInteraction, Message } from "discord.js";
 import { prisma } from "../db";
 import type { Job } from "../db/generated/client";
-import { botLog } from "../logging";
+import { botLog, botError } from "../logging";
+import { closeThreadForJob, parsePrUrl, postToThread } from "./helpers";
 
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
@@ -138,5 +139,43 @@ export async function handleButton(interaction: ButtonInteraction) {
       content: "✅ Review & Merge job created! Waiting for worker...",
       components: [],
     });
+  } else if (action === "merge_now") {
+    const job = await prisma.job.findUnique({ where: { id: jobId } });
+    if (!job || !job.prUrl) {
+      await interaction.reply({ content: ":x: This job has no PR to merge", ephemeral: true });
+      return;
+    }
+
+    const parsed = parsePrUrl(job.prUrl);
+    if (!parsed) {
+      await interaction.reply({ content: ":x: Could not parse PR URL", ephemeral: true });
+      return;
+    }
+
+    await interaction.reply({ content: "🚀 Merging PR now...", ephemeral: true });
+
+    const repoArg = `${parsed.owner}/${parsed.repo}`;
+    try {
+      const ghProc = Bun.spawn([
+        "gh", "pr", "merge", String(parsed.prNumber),
+        "--repo", repoArg,
+        "--squash",
+      ], { stdout: "pipe", stderr: "pipe" });
+      const errorOutput = await new Response(ghProc.stderr).text();
+      const exitCode = await ghProc.exited;
+
+      if (exitCode === 0) {
+        await postToThread(job.threadId, `✅ PR merged by <@${interaction.user.id}>`);
+        await closeThreadForJob({ id: job.id, threadId: job.threadId });
+        await interaction.editReply({ content: "✅ PR merged successfully!" });
+      } else {
+        botError(`[Merge now] Failed to merge PR ${job.prUrl}: ${errorOutput.trim()}`);
+        await postToThread(job.threadId, `❌ Failed to merge PR: ${errorOutput.trim() || "Unknown error"}`);
+        await interaction.editReply({ content: `❌ Failed to merge: ${errorOutput.trim() || "Unknown error"}` });
+      }
+    } catch (err) {
+      botError(`[Merge now] Error merging PR for job #${jobId}:`, err);
+      await interaction.editReply({ content: `❌ Error merging PR: ${err}` });
+    }
   }
 }
