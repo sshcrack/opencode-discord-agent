@@ -1,4 +1,4 @@
-import { BOT_URL, WORKER_ID, dryRun } from "./env";
+import { BOT_URL, WORKER_ID, dryRun, ghToken } from "./env";
 import { workerLog } from "./logging";
 import { poll, heartbeat, checkForUpdates } from "./polling";
 import { killAllProcesses } from "./processes";
@@ -16,6 +16,11 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
 async function main() {
+  if (ghToken) {
+    process.env.GH_TOKEN = ghToken;
+    workerLog(`GitHub bot token configured — PRs will be authored by bot`);
+  }
+
   workerLog(`╔══════════════════════════════════════════════╗`);
   workerLog(`║  Worker ${WORKER_ID.padEnd(10)}                 ║`);
   workerLog(`║  Polling: ${BOT_URL}/trpc          ║`);
