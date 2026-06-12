@@ -1,0 +1,5 @@
+{
+  "clean": true,
+  "issues": [],
+  "summary": "Iteration 3: Fixed amendCoauthor unconditional call on session resume — now guarded by `if (!sessionToResume)` at packages/worker/src/build.ts:206."
+}

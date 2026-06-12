@@ -13,8 +13,15 @@ import { jobLog } from "./logging";
 import { runOpencodeStreaming } from "./opencode";
 
 function setupGitAuthor(worktreePath: string, jobId: number) {
-  Bun.spawnSync(["git", "config", "user.name", gitBotName], { cwd: worktreePath });
-  Bun.spawnSync(["git", "config", "user.email", gitBotEmail], { cwd: worktreePath });
+  const nameProc = Bun.spawnSync(["git", "config", "user.name", gitBotName], { cwd: worktreePath });
+  if (nameProc.exitCode !== 0) {
+    jobLog(jobId, `Failed to set git user.name: ${nameProc.stderr.toString().trim().slice(0, 200)}`);
+  }
+
+  const emailProc = Bun.spawnSync(["git", "config", "user.email", gitBotEmail], { cwd: worktreePath });
+  if (emailProc.exitCode !== 0) {
+    jobLog(jobId, `Failed to set git user.email: ${emailProc.stderr.toString().trim().slice(0, 200)}`);
+  }
 
   process.env.GIT_AUTHOR_NAME = gitBotName;
   process.env.GIT_AUTHOR_EMAIL = gitBotEmail;
@@ -34,6 +41,13 @@ function getBaseBranch(worktreePath: string): string {
     const ref = proc.stdout.toString().trim();
     return ref.replace(/^origin\//, "");
   }
+
+  const lsRemote = Bun.spawnSync(["git", "ls-remote", "--symref", "origin", "HEAD"], { cwd: worktreePath });
+  if (lsRemote.exitCode === 0) {
+    const match = lsRemote.stdout.toString().match(/ref: refs\/heads\/(\S+)\s+HEAD/);
+    if (match) return match[1];
+  }
+
   return "main";
 }
 
@@ -189,7 +203,9 @@ Always provide options + a recommended answer.`;
   const { sessionId } = await runOpencodeStreaming(job.id, worktreePath, undefined, buildArgs);
   jobLog(job.id, `Build agent finished in ${(performance.now() - buildStart).toFixed(0)}ms, session: ${sessionId}`);
 
-  await amendCoauthor(worktreePath, job.id);
+  if (!sessionToResume) {
+    await amendCoauthor(worktreePath, job.id);
+  }
 
   const prView = Bun.spawnSync(["gh", "pr", "view", "--json", "url", "--jq", ".url"], {
     cwd: worktreePath,
