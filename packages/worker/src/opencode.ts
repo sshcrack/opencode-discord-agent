@@ -1,4 +1,4 @@
-import { skipPermissionsArg } from "./env";
+import { skipPermissionsArg, isENOENT, formatENOENT } from "./env";
 import { client } from "./trpc";
 import { jobLog } from "./logging";
 import { handleJsonEvent } from "./events";
@@ -14,11 +14,20 @@ async function runOpencodeStreaming(
   const fullArgs = [...argv, "--format", "json", ...skipPermissionsArg, ...extraArgs];
   jobLog(jobId, `Spawning: ${fullArgs.join(" ")}`);
 
-  const proc = trackProcess(Bun.spawn(fullArgs, {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-  }));
+  const proc = (() => {
+    try {
+      return trackProcess(Bun.spawn(fullArgs, {
+        cwd,
+        stdout: "pipe",
+        stderr: "pipe",
+      }));
+    } catch (err: unknown) {
+      if (isENOENT(err)) {
+        throw new Error(formatENOENT("opencode"), { cause: err });
+      }
+      throw err;
+    }
+  })();
 
   let sessionId = "";
   let lineCount = 0;

@@ -1,4 +1,4 @@
-import { BOT_URL, SHARED_SECRET, WORKER_ID, dryRun } from "./env";
+import { BOT_URL, SHARED_SECRET, WORKER_ID, dryRun, isENOENT, formatENOENT, AUGMENTED_PATH } from "./env";
 import { client, postInfo, postDebug } from "./trpc";
 import type { Job } from "./trpc";
 import path from "node:path";
@@ -282,11 +282,18 @@ if (cmd === "ask") {
       } else {
         const repoName = await getRepoNameWithOwner(repoPath);
         if (repoName) {
-          const ghProc = trackProcess(Bun.spawn(["gh", "issue", "view", String(issueNumber), "--repo", repoName, "--json", "title", "--jq", ".title"], {
-            cwd: repoPath,
-            stdout: "pipe",
-            stderr: "pipe",
-          }));
+          const ghProc = (() => {
+            try {
+              return trackProcess(Bun.spawn(["gh", "issue", "view", String(issueNumber), "--repo", repoName, "--json", "title", "--jq", ".title"], {
+                cwd: repoPath,
+                stdout: "pipe",
+                stderr: "pipe",
+              }));
+            } catch (err: unknown) {
+              if (isENOENT(err)) throw new Error(formatENOENT("gh"), { cause: err });
+              throw err;
+            }
+          })();
           const title = (await new Response(ghProc.stdout).text()).trim();
           const exitCode = await ghProc.exited;
           if (title && exitCode === 0) {
@@ -351,7 +358,14 @@ if (cmd === "ask") {
           if (repoName) {
             const closeArgs = ["issue", "close", String(issueNumber), "--repo", repoName];
             jobLog(job.id, `Closing issue #${issueNumber}: gh ${closeArgs.join(" ")}`);
-            const closeProc = trackProcess(Bun.spawn(["gh", ...closeArgs], { cwd: repoPath, stdout: "pipe", stderr: "pipe" }));
+            const closeProc = (() => {
+              try {
+                return trackProcess(Bun.spawn(["gh", ...closeArgs], { cwd: repoPath, stdout: "pipe", stderr: "pipe" }));
+              } catch (err: unknown) {
+                if (isENOENT(err)) throw new Error(formatENOENT("gh"), { cause: err });
+                throw err;
+              }
+            })();
             await closeProc.exited;
           }
         }
@@ -412,9 +426,14 @@ if (cmd === "ask") {
     if (err instanceof Error && err.stack) jobLog(job.id, `Stack: ${err.stack}`);
     jobLog(job.id, String(err));
     if (helperPath) Bun.spawnSync(["rm", "-f", helperPath]);
+
+    const displayMessage = isENOENT(err)
+      ? `Job failed: ${message}\n💡 This usually means a required tool is missing from PATH. Check that git, gh, gwq, opencode, and bun are installed and accessible. Current PATH: ${AUGMENTED_PATH}`
+      : `Job failed: ${message}`;
+
     await client.postStatus.mutate({
       jobId: job.id,
-      message: `Job failed: ${message}`,
+      message: displayMessage,
       level: "error",
     });
   }

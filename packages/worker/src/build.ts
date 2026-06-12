@@ -1,4 +1,4 @@
-import { dryRun } from "./env";
+import { dryRun, isENOENT, formatENOENT } from "./env";
 import { client, postInfo } from "./trpc";
 import type { Job } from "./trpc";
 import { jobLog } from "./logging";
@@ -106,17 +106,31 @@ Always provide options + a recommended answer.`;
   const { sessionId } = await runOpencodeStreaming(job.id, worktreePath, undefined, buildArgs);
   jobLog(job.id, `Build agent finished in ${(performance.now() - buildStart).toFixed(0)}ms, session: ${sessionId}`);
 
-  const prView = Bun.spawnSync(["gh", "pr", "view", "--json", "url", "--jq", ".url"], {
-    cwd: worktreePath,
-  });
+  const prView = (() => {
+    try {
+      return Bun.spawnSync(["gh", "pr", "view", "--json", "url", "--jq", ".url"], {
+        cwd: worktreePath,
+      });
+    } catch (err: unknown) {
+      if (isENOENT(err)) throw new Error(formatENOENT("gh"), { cause: err });
+      throw err;
+    }
+  })();
 
   if (prView.exitCode !== 0) {
     // PR might not exist yet — try creating it
-    const createView = Bun.spawnSync(["gh", "pr", "create", "--fill", "--json", "url", "--jq", ".url"], {
-      cwd: worktreePath,
-    });
+    const createView = (() => {
+      try {
+        return Bun.spawnSync(["gh", "pr", "create", "--fill", "--json", "url", "--jq", ".url"], {
+          cwd: worktreePath,
+        });
+      } catch (err: unknown) {
+        if (isENOENT(err)) throw new Error(formatENOENT("gh"), { cause: err });
+        throw err;
+      }
+    })();
     if (createView.exitCode !== 0) {
-      const createErr = createView.stderr.toString().trim().slice(0, 400);
+      const createErr = (createView.stderr ?? "").toString().trim().slice(0, 400);
       jobLog(job.id, `Failed to get/create PR URL: ${createErr}`);
       await client.postStatus.mutate({
         jobId: job.id,
@@ -125,12 +139,12 @@ Always provide options + a recommended answer.`;
       });
       return { prUrl: null, sessionId: sessionId || null };
     }
-    const prUrl = createView.stdout.toString().trim();
+    const prUrl = (createView.stdout ?? "").toString().trim();
     jobLog(job.id, `PR URL (created): ${prUrl}`);
     return { prUrl: prUrl || null, sessionId: sessionId || null };
   }
 
-  const prUrl = prView.stdout.toString().trim();
+  const prUrl = (prView.stdout ?? "").toString().trim();
   jobLog(job.id, `PR URL: ${prUrl}`);
   return { prUrl: prUrl || null, sessionId: sessionId || null };
 }
