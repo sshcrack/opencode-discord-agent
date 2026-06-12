@@ -24,9 +24,10 @@ import {
   ReleaseWorkerJobsInput,
   ReleaseWorkerJobsOutput,
   CreateReviewMergeJobInput,
+  CloseJobThreadInput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread, postToThreadWithComponents, renameThread, discordFetch } from "../discord/helpers";
+import { postToThread, postToThreadWithComponents, renameThread, discordFetch, closeThreadForJob } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
 import { showNextQuestion, formatQaBlock } from "../discord/questions";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
@@ -88,7 +89,13 @@ export const appRouter = t.router({
       });
 
       // Verify worker is on the same git HEAD as the bot
-      const botHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
+      let botHead = "";
+      try {
+        const headProc = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
+        botHead = headProc.stdout.toString().trim();
+      } catch {
+        botHead = "unknown";
+      }
       if (botHead && botHead !== "unknown" && input.gitHead !== botHead) {
         return { jobs: [], gitMismatch: true };
       }
@@ -335,6 +342,16 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
+  closeJobThread: t.procedure
+    .input(CloseJobThreadInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const job = await prisma.job.findUnique({ where: { id: input.jobId } });
+      if (!job) return { success: false };
+      await closeThreadForJob(job);
+      return { success: true };
+    }),
+
   askQuestion: t.procedure
     .input(AskQuestionInput)
     .output(StatusResult)
@@ -386,8 +403,14 @@ export const appRouter = t.router({
   getBotHead: t.procedure
     .output(GetBotHeadOutput)
     .query(async () => {
-      const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
-      return { sha: proc.stdout.toString().trim() || "unknown" };
+      let sha = "unknown";
+      try {
+        const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
+        sha = proc.stdout.toString().trim() || "unknown";
+      } catch {
+        sha = "unknown";
+      }
+      return { sha };
     }),
 
   createReviewMergeJob: t.procedure

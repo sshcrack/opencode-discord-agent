@@ -1,4 +1,4 @@
-import { dryRun, skipPermissionsArg } from "./env";
+import { dryRun, skipPermissionsArg, isENOENT, formatENOENT } from "./env";
 import { client, postInfo, getIssueModel } from "./trpc";
 import type { Job } from "./trpc";
 import { jobLog } from "./logging";
@@ -45,10 +45,17 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
     const runStart = performance.now();
     jobLog(job.id, `Spawning: opencode run --model ${issueModel} --dir ${repoPath} --format json [${prompt.length} chars]`);
 
-    const proc = trackProcess(Bun.spawn(
-      ["opencode", "run", "--model", issueModel, "--dir", repoPath, prompt, "--format", "json", ...skipPermissionsArg],
-      { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
-    ));
+    const proc = (() => {
+      try {
+        return trackProcess(Bun.spawn(
+          ["opencode", "run", "--model", issueModel, "--dir", repoPath, prompt, "--format", "json", ...skipPermissionsArg],
+          { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
+        ));
+      } catch (err: unknown) {
+        if (isENOENT(err)) throw new Error(formatENOENT("opencode"), { cause: err });
+        throw err;
+      }
+    })();
 
     let issueText = "";
     let eventCount = 0;
@@ -135,11 +142,18 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
 
     jobLog(job.id, `Spawning: gh ${ghArgs.join(" ")}`);
     const ghStart = performance.now();
-    const ghProc = trackProcess(Bun.spawn(["gh", ...ghArgs], {
-      cwd: repoPath,
-      stdout: "pipe",
-      stderr: "pipe",
-    }));
+    const ghProc = (() => {
+      try {
+        return trackProcess(Bun.spawn(["gh", ...ghArgs], {
+          cwd: repoPath,
+          stdout: "pipe",
+          stderr: "pipe",
+        }));
+      } catch (err: unknown) {
+        if (isENOENT(err)) throw new Error(formatENOENT("gh"), { cause: err });
+        throw err;
+      }
+    })();
 
     const ghOutput = await new Response(ghProc.stdout).text();
     const ghExit = await ghProc.exited;
@@ -158,6 +172,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
     return { issueNumber: null, issueTitle: title };
   } catch (err) {
     jobLog(job.id, `Issue generation error:`, err);
+    if (isENOENT(err)) throw new Error(formatENOENT("opencode"), { cause: err });
     return { issueNumber: null, issueTitle: "" };
   }
 }

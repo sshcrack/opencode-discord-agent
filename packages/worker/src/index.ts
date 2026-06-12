@@ -1,4 +1,4 @@
-import { BOT_URL, WORKER_ID, dryRun, ghToken } from "./env";
+import { BOT_URL, WORKER_ID, dryRun, ghToken, requireBinaries } from "./env";
 import { workerLog } from "./logging";
 import { poll, heartbeat, checkForUpdates } from "./polling";
 import { killAllProcesses } from "./processes";
@@ -28,6 +28,9 @@ async function main() {
   workerLog(`║  Heartbeat: 30s                              ║`);
   workerLog(`║  Mode: ${dryRun ? "🧪 DRY RUN" : "🔧 LIVE".padEnd(23)}           ║`);
   workerLog(`╚══════════════════════════════════════════════╝`);
+
+  requireBinaries();
+  workerLog(`✅ All required binaries found on PATH`);
 
   setInterval(() => {
     heartbeat().catch(err => workerLog("Heartbeat error:", err));

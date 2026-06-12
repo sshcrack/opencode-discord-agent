@@ -1,5 +1,5 @@
 import path from "node:path";
-import { dryRun } from "./env";
+import { dryRun, isENOENT, formatENOENT } from "./env";
 import { postInfo } from "./trpc";
 import type { Job } from "./trpc";
 import { jobLog } from "./logging";
@@ -21,7 +21,12 @@ async function runReviewAgent(
   const reviewDir = path.join(worktreePath, ".opencode", "reviews");
   const reviewFilePath = path.join(reviewDir, `review-${job.id}.json`);
 
-  Bun.spawnSync(["mkdir", "-p", reviewDir]);
+  try {
+    Bun.spawnSync(["mkdir", "-p", reviewDir]);
+  } catch (err: unknown) {
+    if (isENOENT(err)) throw new Error(formatENOENT("mkdir"), { cause: err });
+    throw err;
+  }
 
   const iterationNote = iteration > 0
     ? `\n\nThis is iteration ${iteration + 1} of the review loop. Previous issues were reported to be fixed — verify they are resolved.`

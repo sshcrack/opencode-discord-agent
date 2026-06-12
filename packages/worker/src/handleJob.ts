@@ -1,11 +1,11 @@
-import { BOT_URL, SHARED_SECRET, WORKER_ID, dryRun } from "./env";
+import { BOT_URL, SHARED_SECRET, WORKER_ID, dryRun, isENOENT, formatENOENT, AUGMENTED_PATH } from "./env";
 import { client, postInfo, postDebug } from "./trpc";
 import type { Job } from "./trpc";
 import path from "node:path";
 
 import { jobLog } from "./logging";
 import { trackProcess } from "./processes";
-import { ensureWorktree, ensureFollowupWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
+import { ensureWorktree, ensureFollowupWorktree, ensureReviewWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
 import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
 import { waitForApproval } from "./approval";
@@ -50,6 +50,16 @@ async function handleJob(job: Job) {
   let followUpIssueNumber: number | null = null;
   let followUpBranch: string | null = null;
 
+  // ── Detect standalone review job (no parent, direct prUrl) ──
+  const isDirectReview = job.context === "review-merge"
+    && !!job.prUrl
+    && !job.parentJobId;
+
+  if (isDirectReview) {
+    isReviewMerge = true;
+    jobLog(job.id, `Standalone review job — PR: ${job.prUrl}`);
+  }
+
   // ── Check if this is a follow-up job ─────────────────────────────────
   if (job.parentJobId) {
     isFollowUp = true;
@@ -82,7 +92,20 @@ async function handleJob(job: Job) {
     let branch: string;
     let worktreePath: string;
 
-    if (isFollowUp && followUpBranch) {
+    if (isDirectReview) {
+      await postInfo(job.id, "Fetching PR branch and creating worktree...");
+      const prMatch = job.prUrl!.match(/\/pull\/(\d+)$/);
+      if (!prMatch) {
+        jobLog(job.id, `Could not extract PR number from URL: ${job.prUrl}`);
+        await client.postStatus.mutate({ jobId: job.id, message: "Invalid PR URL", level: "error" });
+        await client.cancelJob.mutate({ jobId: job.id });
+        return;
+      }
+      const prNum = parseInt(prMatch[1]!, 10);
+      const result = await ensureReviewWorktree(repoPath, prNum, job.id);
+      branch = result.branch;
+      worktreePath = result.worktreePath;
+    } else if (isFollowUp && followUpBranch) {
       jobLog(job.id, "Step 1/5: Creating follow-up worktree from parent branch...");
       await postInfo(job.id, "Creating worktree from parent branch...");
       branch = `followup-${job.id}`;
@@ -139,10 +162,13 @@ if (cmd === "ask") {
 
     // ── Review-Merge Workflow ─────────────────────────────────────────────
     if (isReviewMerge) {
-      const parent = await client.getJobStatus.query({ jobId: job.parentJobId!, workerId: WORKER_ID });
-      const prUrl = parent?.prUrl;
+      let prUrl: string | null | undefined = job.prUrl;
+      if (!prUrl && job.parentJobId) {
+        const parent = await client.getJobStatus.query({ jobId: job.parentJobId, workerId: WORKER_ID });
+        prUrl = parent?.prUrl;
+      }
       if (!prUrl) {
-        await client.postStatus.mutate({ jobId: job.id, message: "Parent job has no PR URL", level: "error" });
+        await client.postStatus.mutate({ jobId: job.id, message: "No PR URL available for review", level: "error" });
         await client.cancelJob.mutate({ jobId: job.id });
         cleanupWorktree(repoPath, branch).catch(() => {});
         return;
@@ -225,6 +251,13 @@ if (cmd === "ask") {
         }).catch((err) => {
           jobLog(job.id, `Failed to mark job complete: ${err}`);
         });
+
+        // Close thread immediately for squash merges; auto-merge checked via polling
+        if (mergeResult.method === "squash") {
+          await client.closeJobThread.mutate({ jobId: job.id }).catch((err) => {
+            jobLog(job.id, `Failed to close thread after merge: ${err}`);
+          });
+        }
       } else {
         await client.postStatus.mutate({
           jobId: job.id,
@@ -282,11 +315,18 @@ if (cmd === "ask") {
       } else {
         const repoName = await getRepoNameWithOwner(repoPath);
         if (repoName) {
-          const ghProc = trackProcess(Bun.spawn(["gh", "issue", "view", String(issueNumber), "--repo", repoName, "--json", "title", "--jq", ".title"], {
-            cwd: repoPath,
-            stdout: "pipe",
-            stderr: "pipe",
-          }));
+          const ghProc = (() => {
+            try {
+              return trackProcess(Bun.spawn(["gh", "issue", "view", String(issueNumber), "--repo", repoName, "--json", "title", "--jq", ".title"], {
+                cwd: repoPath,
+                stdout: "pipe",
+                stderr: "pipe",
+              }));
+            } catch (err: unknown) {
+              if (isENOENT(err)) throw new Error(formatENOENT("gh"), { cause: err });
+              throw err;
+            }
+          })();
           const title = (await new Response(ghProc.stdout).text()).trim();
           const exitCode = await ghProc.exited;
           if (title && exitCode === 0) {
@@ -351,7 +391,14 @@ if (cmd === "ask") {
           if (repoName) {
             const closeArgs = ["issue", "close", String(issueNumber), "--repo", repoName];
             jobLog(job.id, `Closing issue #${issueNumber}: gh ${closeArgs.join(" ")}`);
-            const closeProc = trackProcess(Bun.spawn(["gh", ...closeArgs], { cwd: repoPath, stdout: "pipe", stderr: "pipe" }));
+            const closeProc = (() => {
+              try {
+                return trackProcess(Bun.spawn(["gh", ...closeArgs], { cwd: repoPath, stdout: "pipe", stderr: "pipe" }));
+              } catch (err: unknown) {
+                if (isENOENT(err)) throw new Error(formatENOENT("gh"), { cause: err });
+                throw err;
+              }
+            })();
             await closeProc.exited;
           }
         }
@@ -412,9 +459,14 @@ if (cmd === "ask") {
     if (err instanceof Error && err.stack) jobLog(job.id, `Stack: ${err.stack}`);
     jobLog(job.id, String(err));
     if (helperPath) Bun.spawnSync(["rm", "-f", helperPath]);
+
+    const displayMessage = isENOENT(err)
+      ? `Job failed: ${message}\n💡 This usually means a required tool is missing from PATH. Check that git, gh, gwq, opencode, and bun are installed and accessible. Current PATH: ${AUGMENTED_PATH}`
+      : `Job failed: ${message}`;
+
     await client.postStatus.mutate({
       jobId: job.id,
-      message: `Job failed: ${message}`,
+      message: displayMessage,
       level: "error",
     });
   }

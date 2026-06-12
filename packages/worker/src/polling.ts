@@ -1,12 +1,23 @@
-import { WORKER_ID, dryRun } from "./env";
+import { WORKER_ID, dryRun, isENOENT, formatENOENT } from "./env";
 import { client } from "./trpc";
 import { workerLog } from "./logging";
 import { registerJob, unregisterJob, isEmpty } from "./state";
 import { handleJob } from "./handleJob";
 import { killAllProcesses } from "./processes";
 
+function getGitHead(): string {
+  try {
+    const result = Bun.spawnSync(["git", "rev-parse", "HEAD"]);
+    if (result.exitCode !== 0) return "";
+    return result.stdout.toString().trim();
+  } catch (err: unknown) {
+    if (isENOENT(err)) throw new Error(formatENOENT("git"), { cause: err });
+    throw err;
+  }
+}
+
 async function poll(): Promise<void> {
-  const localHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
+  const localHead = getGitHead();
   const result = await client.pollNextJob.query({ workerId: WORKER_ID, gitHead: localHead });
 
   if (result.gitMismatch) {
@@ -27,14 +38,24 @@ async function runUpdate() {
   await releaseAllJobs(); // defensive — usually no-op
 
   workerLog(`Running update: git pull + bun install`);
-  const pull = Bun.spawnSync(["git", "pull"]);
-  if (pull.exitCode !== 0) {
-    workerLog(`git pull failed: ${pull.stderr.toString().slice(0, 300)}`);
-    return;
+  try {
+    const pull = Bun.spawnSync(["git", "pull"]);
+    if (pull.exitCode !== 0) {
+      workerLog(`git pull failed: ${pull.stderr.toString().slice(0, 300)}`);
+      return;
+    }
+  } catch (err: unknown) {
+    if (isENOENT(err)) throw new Error(formatENOENT("git"), { cause: err });
+    throw err;
   }
-  const install = Bun.spawnSync(["bun", "install"]);
-  if (install.exitCode !== 0) {
-    workerLog(`bun install failed: ${install.stderr.toString().slice(0, 300)}`);
+  try {
+    const install = Bun.spawnSync(["bun", "install"]);
+    if (install.exitCode !== 0) {
+      workerLog(`bun install failed: ${install.stderr.toString().slice(0, 300)}`);
+    }
+  } catch (err: unknown) {
+    if (isENOENT(err)) throw new Error(formatENOENT("bun"), { cause: err });
+    throw err;
   }
   const killed = await killAllProcesses();
   if (killed > 0) workerLog(`Force-killed ${killed} child process(es) during update`);
@@ -58,14 +79,25 @@ async function checkForUpdates() {
 
   try {
     const botHead = await client.getBotHead.query();
-    const localHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
+    const localHead = (() => {
+      try {
+        return Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout?.toString().trim() ?? "";
+      } catch (err: unknown) {
+        if (isENOENT(err)) throw new Error(formatENOENT("git"), { cause: err });
+        throw err;
+      }
+    })();
     if (!localHead || !botHead.sha || botHead.sha === "unknown") return;
     if (localHead === botHead.sha) return;
 
     workerLog(`Update check: local=${localHead.slice(0, 12)} bot=${botHead.sha.slice(0, 12)} — updating...`);
     runUpdate();
   } catch (err) {
-    workerLog(`Update check failed: ${err}`);
+    if (isENOENT(err)) {
+      workerLog(`Update check failed: ${formatENOENT("git")}`);
+    } else {
+      workerLog(`Update check failed: ${err}`);
+    }
   }
 }
 
