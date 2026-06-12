@@ -95,8 +95,20 @@ export const appRouter = t.router({
         orderBy: { createdAt: "asc" },
       });
 
+      const activeStatuses: Job["status"][] = ["claimed", "planning", "plan_ready", "approved", "building"];
+
       const claimed = [];
       for (const job of pending) {
+        // Only one active job per thread — skip if this thread already has one
+        const existingActive = await prisma.job.findFirst({
+          where: {
+            threadId: job.threadId,
+            status: { in: activeStatuses },
+            id: { not: job.id },
+          },
+        });
+        if (existingActive) continue;
+
         const repo = await prisma.repository.findUnique({ where: { slug: job.repoSlug } });
         const updated = await prisma.job.update({
           where: { id: job.id, status: "pending" },
