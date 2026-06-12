@@ -2,6 +2,18 @@ import { dryRun } from "./env";
 import { jobLog } from "./logging";
 import { execCommand } from "./exec";
 
+async function setupGitAuthor(worktreePath: string, jobId: number): Promise<void> {
+  jobLog(jobId, `Setting git author config in worktree at ${worktreePath}`);
+  try {
+    await execCommand("git", ["config", "user.name", "opencode-bot"], worktreePath, jobId);
+    await execCommand("git", ["config", "user.email", "opencode-bot@users.noreply.github.com"], worktreePath, jobId);
+    jobLog(jobId, "Git author configured as opencode-bot");
+  } catch (err: unknown) {
+    jobLog(jobId, `Failed to set git author config: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error("Git author configuration failed — commits may fail without git config", { cause: err });
+  }
+}
+
 async function ensureWorktree(repoPath: string, branch: string, jobId: number): Promise<string> {
   if (dryRun) {
     jobLog(jobId, `[DRY RUN] Checking existing worktrees for branch ${branch}`);
@@ -42,6 +54,21 @@ async function cleanupWorktree(repoPath: string, branch: string) {
     } else {
       jobLog(0, "Worktree cleanup error:", msg);
     }
+  }
+}
+
+async function getPRBaseBranch(repoPath: string, prUrl: string, jobId: number): Promise<string> {
+  jobLog(jobId, `Fetching base branch for PR ${prUrl}`);
+  try {
+    const baseBranch = (await execCommand(
+      "gh", ["pr", "view", prUrl, "--json", "baseRefName", "--jq", ".baseRefName"], repoPath, jobId,
+    )).trim();
+    jobLog(jobId, `PR base branch: ${baseBranch}`);
+    return baseBranch;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    jobLog(jobId, `Failed to get PR base branch: ${message}, falling back to "main"`);
+    return "main";
   }
 }
 
@@ -119,4 +146,4 @@ async function ensureReviewWorktree(repoPath: string, prNumber: number, jobId: n
   return { worktreePath, branch };
 }
 
-export { ensureWorktree, ensureFollowupWorktree, ensureReviewWorktree, cleanupWorktree, getRepoNameWithOwner };
+export { setupGitAuthor, ensureWorktree, ensureFollowupWorktree, ensureReviewWorktree, cleanupWorktree, getRepoNameWithOwner, getPRBaseBranch };
