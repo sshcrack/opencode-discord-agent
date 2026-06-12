@@ -102,6 +102,11 @@ SHARED_SECRET="your-secret" WORKER_ID="my-laptop" bun run --cwd packages/worker 
 | `/submit [auto:true/false]` | Submit thread as a job (run inside a report thread) |
 | `/set-auto mode:on/off` | Set global auto-mode (auto-approve plans after 10 s) |
 | `/set-verbose mode:on/off` | Toggle verbose status reporting (default: on — all agent steps) |
+| `/help` | Show a categorized list of all available commands |
+| `/jobs [repo] [status] [limit]` | List recent jobs with optional filters |
+| `/settings view` | View all current bot settings |
+| `/settings model <name>` | Set the issue generation model |
+| `/settings fallback-model <name>` | Set the fallback model (used when no worker online) |
 
 ## Job Flow
 
