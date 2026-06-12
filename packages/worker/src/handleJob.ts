@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { jobLog } from "./logging";
 import { trackProcess } from "./processes";
-import { ensureWorktree, ensureFollowupWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
+import { ensureWorktree, ensureFollowupWorktree, ensureReviewWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
 import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
 import { waitForApproval } from "./approval";
@@ -50,6 +50,16 @@ async function handleJob(job: Job) {
   let followUpIssueNumber: number | null = null;
   let followUpBranch: string | null = null;
 
+  // ── Detect standalone review job (no parent, direct prUrl) ──
+  const isDirectReview = job.context === "review-merge"
+    && !!job.prUrl
+    && !job.parentJobId;
+
+  if (isDirectReview) {
+    isReviewMerge = true;
+    jobLog(job.id, `Standalone review job — PR: ${job.prUrl}`);
+  }
+
   // ── Check if this is a follow-up job ─────────────────────────────────
   if (job.parentJobId) {
     isFollowUp = true;
@@ -82,7 +92,20 @@ async function handleJob(job: Job) {
     let branch: string;
     let worktreePath: string;
 
-    if (isFollowUp && followUpBranch) {
+    if (isDirectReview) {
+      await postInfo(job.id, "Fetching PR branch and creating worktree...");
+      const prMatch = job.prUrl!.match(/\/pull\/(\d+)$/);
+      if (!prMatch) {
+        jobLog(job.id, `Could not extract PR number from URL: ${job.prUrl}`);
+        await client.postStatus.mutate({ jobId: job.id, message: "Invalid PR URL", level: "error" });
+        await client.cancelJob.mutate({ jobId: job.id });
+        return;
+      }
+      const prNum = parseInt(prMatch[1]!, 10);
+      const result = await ensureReviewWorktree(repoPath, prNum, job.id);
+      branch = result.branch;
+      worktreePath = result.worktreePath;
+    } else if (isFollowUp && followUpBranch) {
       jobLog(job.id, "Step 1/5: Creating follow-up worktree from parent branch...");
       await postInfo(job.id, "Creating worktree from parent branch...");
       branch = `followup-${job.id}`;
@@ -139,10 +162,13 @@ if (cmd === "ask") {
 
     // ── Review-Merge Workflow ─────────────────────────────────────────────
     if (isReviewMerge) {
-      const parent = await client.getJobStatus.query({ jobId: job.parentJobId!, workerId: WORKER_ID });
-      const prUrl = parent?.prUrl;
+      let prUrl: string | null | undefined = job.prUrl;
+      if (!prUrl && job.parentJobId) {
+        const parent = await client.getJobStatus.query({ jobId: job.parentJobId, workerId: WORKER_ID });
+        prUrl = parent?.prUrl;
+      }
       if (!prUrl) {
-        await client.postStatus.mutate({ jobId: job.id, message: "Parent job has no PR URL", level: "error" });
+        await client.postStatus.mutate({ jobId: job.id, message: "No PR URL available for review", level: "error" });
         await client.cancelJob.mutate({ jobId: job.id });
         cleanupWorktree(repoPath, branch).catch(() => {});
         return;
