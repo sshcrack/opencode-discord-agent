@@ -46,6 +46,10 @@ async function waitForApproval(
       jobLog(jobId, `Cancelled after ${pollCount} polls`);
       return null;
     }
+    if (current.status === "failed") {
+      jobLog(jobId, `Job marked as failed after ${pollCount} polls`);
+      return null;
+    }
 
     if (current.status === "planning" && current.pendingSuggestion) {
       const suggestion = current.pendingSuggestion;

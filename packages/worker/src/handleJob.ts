@@ -214,7 +214,16 @@ if (cmd === "ask") {
       await postInfo(job.id, "Planning complete, posting plan for review...");
 
       jobLog(job.id, `Posting plan to Discord thread via planReady...`);
-      await client.planReady.mutate({ jobId: job.id, planMd, sessionId });
+      const planResult = await client.planReady.mutate({ jobId: job.id, planMd, sessionId });
+      if (!planResult.success) {
+        jobLog(job.id, `Plan post failed — thread may have been deleted, aborting`);
+        await client.postStatus.mutate({
+          jobId: job.id,
+          message: "Plan could not be posted — Discord thread may have been deleted",
+          level: "error",
+        });
+        return;
+      }
       jobLog(job.id, `Plan posted to Discord`);
 
       // ── Step 4: Approval loop ────────────────────────────────────────────
@@ -326,6 +335,11 @@ async function pollAndInjectAnswers(
     await Bun.sleep(3000);
     const status = await client.getJobStatus.query({ jobId, workerId: WORKER_ID }).catch(() => null);
     if (!status) continue;
+
+    if (status.status === "failed" || status.status === "cancelled") {
+      jobLog(jobId, `Job ${status.status} while waiting for answers, aborting`);
+      return null;
+    }
 
     if (status.pendingQuestions && status.pendingAnswers) {
       const questions = JSON.parse(status.pendingQuestions);
