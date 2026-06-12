@@ -78,9 +78,11 @@ async function ensureFollowupWorktree(repoPath: string, parentBranch: string, ne
   jobLog(jobId, `Fetching parent branch: origin/${parentBranch}`);
   await execCommand("git", ["fetch", "origin", parentBranch], repoPath, jobId);
 
-  const worktreePath = (await execCommand(
-    "gwq", ["add", "-b", newBranch], repoPath, jobId,
-  )).trim();
+  jobLog(jobId, `Running: gwq add -b ${newBranch} (in ${repoPath})`);
+  await execCommand("gwq", ["add", "-b", newBranch], repoPath, jobId);
+
+  jobLog(jobId, `Running: gwq get ${newBranch}`);
+  const worktreePath = (await execCommand("gwq", ["get", newBranch], repoPath, jobId)).trim();
 
   await execCommand("git", ["reset", "--hard", `origin/${parentBranch}`], worktreePath, jobId);
 
