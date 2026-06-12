@@ -17,6 +17,7 @@ import { runOpencodeStreaming } from "./opencode";
 function configureGitEnv(worktreePath: string, jobId: number) {
   Bun.spawnSync(["git", "config", "user.name", gitBotName], { cwd: worktreePath });
   Bun.spawnSync(["git", "config", "user.email", gitBotEmail], { cwd: worktreePath });
+  Bun.spawnSync(["git", "config", "push.autoSetupRemote", "true"], { cwd: worktreePath });
 
   jobLog(jobId, `Git author configured: ${gitBotName} <${gitBotEmail}>`);
 }
@@ -66,12 +67,17 @@ async function amendCoauthor(worktreePath: string, jobId: number): Promise<void>
     return;
   }
 
-  const pushProc = Bun.spawnSync(["git", "push", "--force-with-lease"], { cwd: worktreePath });
+  const branch = Bun.spawnSync(["git", "rev-parse", "--abbrev-ref", "HEAD"], { cwd: worktreePath })
+    .stdout.toString().trim();
+  const pushProc = Bun.spawnSync(
+    ["git", "push", "--set-upstream", "origin", branch, "--force-with-lease"],
+    { cwd: worktreePath },
+  );
   if (pushProc.exitCode !== 0) {
     const errMsg = pushProc.stderr.toString().slice(0, 300);
-    jobLog(jobId, `Force push failed: ${errMsg}`);
+    jobLog(jobId, `Force push failed (${branch}): ${errMsg}`);
   } else {
-    jobLog(jobId, `Co-authored-by trailer applied and force-pushed`);
+    jobLog(jobId, `Co-authored-by trailer applied and force-pushed (${branch})`);
   }
 }
 
@@ -206,7 +212,7 @@ Always provide options + a recommended answer.`;
     // PR might not exist yet — try creating it
     const createView = (() => {
       try {
-        return Bun.spawnSync(["gh", "pr", "create", "--fill", "--json", "url", "--jq", ".url"], {
+        return Bun.spawnSync(["gh", "pr", "create", "--fill"], {
           cwd: worktreePath,
         });
       } catch (err: unknown) {
