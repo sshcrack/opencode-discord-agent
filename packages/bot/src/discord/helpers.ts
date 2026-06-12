@@ -38,15 +38,50 @@ export async function discordFetch(threadId: string) {
   }
 }
 
+const DISCORD_CONTENT_LIMIT = 2000;
+
+function truncateContent(content: string): string {
+  if (content.length <= DISCORD_CONTENT_LIMIT) return content;
+  return content.slice(0, DISCORD_CONTENT_LIMIT - 100) + `\n\n… *(truncated, ${content.length - DISCORD_CONTENT_LIMIT + 100} chars removed)*`;
+}
+
 export async function postToThread(threadId: string, content: string) {
   try {
     const channel = await discordFetch(threadId);
     if (channel?.isThread()) {
-      await channel.send(content);
+      await channel.send(truncateContent(content));
     }
   } catch (err) {
     botError(`Failed to post to thread ${threadId}:`, err);
   }
+}
+
+export async function editMessage(threadId: string, messageId: string, content: string) {
+  try {
+    const channel = await discordFetch(threadId);
+    if (channel?.isThread()) {
+      const msg = await channel.messages.fetch(messageId);
+      await msg.edit(truncateContent(content));
+      return true;
+    }
+  } catch {
+    // Message might be gone or permissions changed — fall through
+  }
+  return false;
+}
+
+export async function fetchLastMessage(threadId: string): Promise<string | null> {
+  try {
+    const channel = await discordFetch(threadId);
+    if (channel?.isThread()) {
+      const messages = await channel.messages.fetch({ limit: 1 });
+      const last = messages.first();
+      return last?.id ?? null;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 export async function closeThread(threadId: string) {

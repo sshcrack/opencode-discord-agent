@@ -4,6 +4,63 @@ import { jobLog } from "./logging";
 import { handleJsonEvent } from "./events";
 import { trackProcess } from "./processes";
 
+const ACCUMULATOR_FLUSH_INTERVAL = 3000;
+const ACCUMULATOR_MAX_LINES = 15;
+
+interface AccumulatorEntry {
+  message: string;
+  level: "info" | "debug" | "success";
+  diff?: string;
+}
+
+class EventAccumulator {
+  private entries: AccumulatorEntry[] = [];
+  private _lastMode: "new" | "replace" | "append" = "new";
+  private _level: "info" | "debug" | "success" = "info";
+
+  get lastMode(): "new" | "replace" | "append" {
+    return this._lastMode;
+  }
+
+  push(result: NonNullable<ReturnType<typeof handleJsonEvent>>): void {
+    if (result.mode === "new") {
+      this.flush();
+    }
+    this._lastMode = result.mode;
+    if (result.level === "success") {
+      this._level = result.level;
+    } else if (this.entries.length === 0) {
+      this._level = result.level;
+    }
+    this.entries.push({ message: result.message, level: result.level, diff: result.diff });
+  }
+
+  get level(): "info" | "debug" | "success" {
+    return this._level;
+  }
+
+  get shouldFlush(): boolean {
+    return this.entries.length >= ACCUMULATOR_MAX_LINES;
+  }
+
+  get isEmpty(): boolean {
+    return this.entries.length === 0;
+  }
+
+  flush(): string | null {
+    if (this.entries.length === 0) return null;
+    const combined = this.entries.map(e => e.message).join("\n");
+    this.entries = [];
+    this._level = "info";
+    return combined;
+  }
+
+  get currentDiff(): string | undefined {
+    const lastEdit = this.entries.toReversed().find(e => e.diff);
+    return lastEdit?.diff;
+  }
+}
+
 async function runOpencodeStreaming(
   jobId: number,
   cwd: string,
@@ -37,8 +94,22 @@ async function runOpencodeStreaming(
   const reader = proc.stdout.getReader();
   const decoder = new TextDecoder();
   const streamStart = performance.now();
+  const acc = new EventAccumulator();
+  let lastFlush = performance.now();
 
   const stderrPromise = new Response(proc.stderr).text();
+
+  async function flushAccumulator(forceNew: boolean = false): Promise<void> {
+    if (acc.isEmpty) return;
+    const combined = acc.flush();
+    if (!combined) return;
+    const mode = forceNew ? "new" : (acc.lastMode === "new" ? "replace" : "append");
+    const diff = acc.currentDiff;
+    await client.postStatus
+      .mutate({ jobId, message: combined, level: acc.level, mode, diff })
+      .catch(() => {});
+    lastFlush = performance.now();
+  }
 
   try {
     while (true) {
@@ -70,9 +141,15 @@ async function runOpencodeStreaming(
 
         const result = handleJsonEvent(event, jobId, cwd);
         if (result) {
-          await client.postStatus
-            .mutate({ jobId, message: result.message, level: result.level, append: result.append })
-            .catch(() => {});
+          const prevEmpty = acc.isEmpty;
+          const isStepStart = result.mode === "new";
+          if (isStepStart) {
+            await flushAccumulator(true);
+          }
+          acc.push(result);
+          if (acc.shouldFlush || (isStepStart && !prevEmpty)) {
+            await flushAccumulator(isStepStart);
+          }
         }
 
         if (evt.type === "text") {
@@ -82,10 +159,16 @@ async function runOpencodeStreaming(
           }
         }
       }
+
+      if (performance.now() - lastFlush > ACCUMULATOR_FLUSH_INTERVAL) {
+        await flushAccumulator();
+      }
     }
   } finally {
     reader.releaseLock();
   }
+
+  await flushAccumulator(true);
 
   if (buffer.trim()) {
     try {
@@ -96,9 +179,8 @@ async function runOpencodeStreaming(
       }
       const result = handleJsonEvent(event, jobId, cwd);
       if (result) {
-        await client.postStatus
-          .mutate({ jobId, message: result.message, level: result.level, append: result.append })
-          .catch(() => {});
+        acc.push(result);
+        await flushAccumulator(true);
       }
     } catch {
       // ignore partial/invalid JSON in tail buffer

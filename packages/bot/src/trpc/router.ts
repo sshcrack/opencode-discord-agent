@@ -27,7 +27,7 @@ import {
   CloseJobThreadInput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread, postToThreadWithComponents, renameThread, discordFetch, closeThreadForJob } from "../discord/helpers";
+import { postToThread, postToThreadWithComponents, editMessage, fetchLastMessage, renameThread, discordFetch, closeThreadForJob } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
 import { showNextQuestion, formatQaBlock } from "../discord/questions";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
@@ -191,7 +191,34 @@ export const appRouter = t.router({
         input.level === "success" ? "✅" :
         input.level === "debug" ? "🔍" : "❌";
 
-      await postToThread(job.threadId, `${emoji} ${input.message}`);
+      const fullMessage = input.diff
+        ? `${emoji} ${input.message}\n\`\`\`diff\n${input.diff}\n\`\`\``
+        : `${emoji} ${input.message}`;
+
+      const mode = input.mode ?? "new";
+      const messageId = job.statusMessageId;
+
+      if (mode === "replace" && messageId) {
+        const edited = await editMessage(job.threadId, messageId, fullMessage).catch(() => false);
+        if (edited) return { success: true };
+      }
+
+      if (mode === "append" && messageId) {
+        const edited = await editMessage(job.threadId, messageId, fullMessage).catch(() => false);
+        if (edited) return { success: true };
+      }
+
+      // Fall through to posting a new message
+      await postToThread(job.threadId, fullMessage).catch(() => {});
+
+      // Track the last status message ID for future replace/append operations
+      const lastId = await fetchLastMessage(job.threadId).catch(() => null);
+      if (lastId && lastId !== messageId) {
+        await prisma.job.update({
+          where: { id: input.jobId },
+          data: { statusMessageId: lastId },
+        }).catch(() => {});
+      }
 
       return { success: true };
     }),

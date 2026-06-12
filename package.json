@@ -20,7 +20,7 @@
     "lint:all": "oxlint --deny-warnings"
   },
   "devDependencies": {
-    "@types/bun": "^1.2.0",
+    "@types/bun": "^1.3.14",
     "bun-types": "^1.3.14",
     "oxlint": "^1.69.0",
     "typescript": "^5.7.0"
