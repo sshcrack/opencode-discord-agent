@@ -85,11 +85,15 @@ export const PlanReadyInput = z.object({
   sessionId: z.string(),
 });
 
+export const PostStatusMode = z.enum(["new", "replace", "append"]);
+export type PostStatusMode = z.infer<typeof PostStatusMode>;
+
 export const PostStatusInput = z.object({
   jobId: z.number(),
   message: z.string(),
   level: StatusLevel,
-  append: z.boolean().optional().default(false),
+  mode: PostStatusMode.optional().default("new"),
+  diff: z.string().optional(),
 });
 
 export const ApproveJobInput = z.object({

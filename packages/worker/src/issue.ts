@@ -84,7 +84,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
           const result = handleJsonEvent(event, job.id, repoPath);
           if (result) {
             await client.postStatus
-              .mutate({ jobId: job.id, message: result.message, level: result.level, append: result.append })
+              .mutate({ jobId: job.id, message: result.message, level: result.level, mode: result.mode, diff: result.diff })
               .catch(() => {});
           }
           const evt = event as Record<string, unknown>;
