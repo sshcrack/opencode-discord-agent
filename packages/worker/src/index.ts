@@ -5,8 +5,8 @@ import { killAllProcesses } from "./processes";
 
 async function shutdown(signal: string) {
   console.log(`[${signal}] Worker shutting down gracefully...`);
-  const killed = killAllProcesses();
-  if (killed > 0) console.log(`Killed ${killed} child process(es)`);
+  const killed = await killAllProcesses();
+  if (killed > 0) console.log(`Force-killed ${killed} child process(es) after graceful shutdown`);
   const { releaseAllJobs } = await import("./state");
   await releaseAllJobs();
   process.exit(0);

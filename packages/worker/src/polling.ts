@@ -36,8 +36,8 @@ async function runUpdate() {
   if (install.exitCode !== 0) {
     workerLog(`bun install failed: ${install.stderr.toString().slice(0, 300)}`);
   }
-  const killed = killAllProcesses();
-  if (killed > 0) workerLog(`Killed ${killed} child process(es) during update`);
+  const killed = await killAllProcesses();
+  if (killed > 0) workerLog(`Force-killed ${killed} child process(es) during update`);
   workerLog(`Update complete — restarting...`);
   process.exit(0);
 }
