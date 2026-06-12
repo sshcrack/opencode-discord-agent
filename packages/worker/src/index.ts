@@ -1,20 +1,19 @@
 import { BOT_URL, WORKER_ID, dryRun } from "./env";
 import { workerLog } from "./logging";
 import { poll, heartbeat, checkForUpdates } from "./polling";
+import { killAllProcesses } from "./processes";
 
-process.on("SIGTERM", async () => {
-  console.log("[SIGTERM] Worker shutting down gracefully...");
+async function shutdown(signal: string) {
+  console.log(`[${signal}] Worker shutting down gracefully...`);
+  const killed = killAllProcesses();
+  if (killed > 0) console.log(`Killed ${killed} child process(es)`);
   const { releaseAllJobs } = await import("./state");
   await releaseAllJobs();
   process.exit(0);
-});
+}
 
-process.on("SIGINT", async () => {
-  console.log("[SIGINT] Worker shutting down gracefully...");
-  const { releaseAllJobs } = await import("./state");
-  await releaseAllJobs();
-  process.exit(0);
-});
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 async function main() {
   console.log(`╔══════════════════════════════════════════════╗`);

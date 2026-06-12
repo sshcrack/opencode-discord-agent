@@ -1,14 +1,15 @@
 import { jobLog } from "./logging";
+import { trackProcess } from "./processes";
 
 async function execCommand(cmd: string, args: string[], cwd?: string, jobId?: number): Promise<string> {
   const jId = jobId ?? 0;
   jobLog(jId, `exec: ${cmd} ${args.join(" ")}${cwd ? ` (in ${cwd})` : ""}`);
 
-  const proc = Bun.spawn([cmd, ...args], {
+  const proc = trackProcess(Bun.spawn([cmd, ...args], {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
-  });
+  }));
 
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),

@@ -4,6 +4,7 @@ import type { Job } from "./trpc";
 import { jobLog } from "./logging";
 import { getRepoNameWithOwner } from "./worktree";
 import { handleJsonEvent } from "./events";
+import { trackProcess } from "./processes";
 
 async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber: number | null; issueTitle: string }> {
   try {
@@ -44,10 +45,10 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
     const runStart = performance.now();
     jobLog(job.id, `Spawning: opencode run --model ${issueModel} --dir ${repoPath} --format json [${prompt.length} chars]`);
 
-    const proc = Bun.spawn(
+    const proc = trackProcess(Bun.spawn(
       ["opencode", "run", "--model", issueModel, "--dir", repoPath, prompt, "--format", "json", ...skipPermissionsArg],
       { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
-    );
+    ));
 
     let issueText = "";
     let eventCount = 0;
@@ -130,11 +131,11 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
 
     jobLog(job.id, `Spawning: gh ${ghArgs.join(" ")}`);
     const ghStart = performance.now();
-    const ghProc = Bun.spawn(["gh", ...ghArgs], {
+    const ghProc = trackProcess(Bun.spawn(["gh", ...ghArgs], {
       cwd: repoPath,
       stdout: "pipe",
       stderr: "pipe",
-    });
+    }));
 
     const ghOutput = await new Response(ghProc.stdout).text();
     const ghExit = await ghProc.exited;

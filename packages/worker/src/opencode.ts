@@ -2,6 +2,7 @@ import { skipPermissionsArg } from "./env";
 import { client } from "./trpc";
 import { jobLog } from "./logging";
 import { handleJsonEvent } from "./events";
+import { trackProcess } from "./processes";
 
 async function runOpencodeStreaming(
   jobId: number,
@@ -13,11 +14,11 @@ async function runOpencodeStreaming(
   const fullArgs = [...argv, "--format", "json", ...skipPermissionsArg, ...extraArgs];
   jobLog(jobId, `Spawning: ${fullArgs.join(" ")}`);
 
-  const proc = Bun.spawn(fullArgs, {
+  const proc = trackProcess(Bun.spawn(fullArgs, {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
-  });
+  }));
 
   let sessionId = "";
   let lineCount = 0;

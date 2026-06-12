@@ -3,6 +3,7 @@ import { client, type Job } from "./trpc";
 import { workerLog } from "./logging";
 import { registerJob, unregisterJob, isEmpty } from "./state";
 import { handleJob } from "./handleJob";
+import { killAllProcesses } from "./processes";
 
 async function poll(): Promise<void> {
   const localHead = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
@@ -35,6 +36,8 @@ async function runUpdate() {
   if (install.exitCode !== 0) {
     workerLog(`bun install failed: ${install.stderr.toString().slice(0, 300)}`);
   }
+  const killed = killAllProcesses();
+  if (killed > 0) workerLog(`Killed ${killed} child process(es) during update`);
   workerLog(`Update complete — restarting...`);
   process.exit(0);
 }

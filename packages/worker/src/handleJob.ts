@@ -4,6 +4,7 @@ import type { Job } from "./trpc";
 import path from "node:path";
 
 import { jobLog } from "./logging";
+import { trackProcess } from "./processes";
 import { createWorktree, createFollowupWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
 import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
@@ -166,11 +167,11 @@ if (cmd === "ask") {
       } else {
         const repoName = await getRepoNameWithOwner(repoPath);
         if (repoName) {
-          const ghProc = Bun.spawn(["gh", "issue", "view", String(issueNumber), "--repo", repoName, "--json", "title", "--jq", ".title"], {
+          const ghProc = trackProcess(Bun.spawn(["gh", "issue", "view", String(issueNumber), "--repo", repoName, "--json", "title", "--jq", ".title"], {
             cwd: repoPath,
             stdout: "pipe",
             stderr: "pipe",
-          });
+          }));
           const title = (await new Response(ghProc.stdout).text()).trim();
           const exitCode = await ghProc.exited;
           if (title && exitCode === 0) {
@@ -226,7 +227,7 @@ if (cmd === "ask") {
           if (repoName) {
             const closeArgs = ["issue", "close", String(issueNumber), "--repo", repoName];
             jobLog(job.id, `Closing issue #${issueNumber}: gh ${closeArgs.join(" ")}`);
-            const closeProc = Bun.spawn(["gh", ...closeArgs], { cwd: repoPath, stdout: "pipe", stderr: "pipe" });
+            const closeProc = trackProcess(Bun.spawn(["gh", ...closeArgs], { cwd: repoPath, stdout: "pipe", stderr: "pipe" }));
             await closeProc.exited;
           }
         }
