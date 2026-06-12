@@ -7,6 +7,7 @@ import {
 } from "discord.js";
 import { prisma } from "../../db";
 import { Command } from "./Command";
+import { botLog, botWarn } from "../../logging";
 import { getClient } from "../helpers";
 
 export class RepoCommand extends Command {
@@ -53,7 +54,7 @@ export class RepoCommand extends Command {
   async execute(interaction: CommandInteraction) {
     if (!interaction.isChatInputCommand()) return;
     const subcommand = interaction.options.getSubcommand();
-    console.log("[RepoCommand] Subcommand:", subcommand);
+    botLog("[RepoCommand] Subcommand:", subcommand);
 
     if (subcommand === "add") {
       const slug = interaction.options.getString("slug", true);
@@ -88,7 +89,7 @@ export class RepoCommand extends Command {
           });
           channelId = created.id;
         } catch (err) {
-          console.warn(`[RepoCommand] Failed to create Discord channel for ${slug}:`, err);
+          botWarn(`[RepoCommand] Failed to create Discord channel for ${slug}:`, err);
         }
       }
 
@@ -140,7 +141,7 @@ export class RepoCommand extends Command {
             await (channel as { delete: (reason?: string) => Promise<unknown> }).delete(`Repository ${slug} removed`);
           }
         } catch (err) {
-          console.warn(`[RepoCommand] Failed to delete channel ${repo.channelId}:`, err);
+          botWarn(`[RepoCommand] Failed to delete channel ${repo.channelId}:`, err);
         }
       }
 
@@ -201,11 +202,11 @@ export class RepoCommand extends Command {
           type: ChannelType.GuildCategory,
           reason: "Auto-created for repository channel sync",
         });
-        console.log("[RepoCommand] Created Repositories category");
+        botLog("[RepoCommand] Created Repositories category");
       }
 
       let created = 0;
-      let bound = 0;
+      const bound = 0;
       let skipped = 0;
 
       for (const repo of repos) {
@@ -234,7 +235,7 @@ export class RepoCommand extends Command {
         });
 
         created++;
-        console.log(`[RepoCommand] Created channel #${repo.slug} (${created_.id}) for repo ${repo.slug}`);
+        botLog(`[RepoCommand] Created channel #${repo.slug} (${created_.id}) for repo ${repo.slug}`);
       }
 
       const parts: string[] = [];

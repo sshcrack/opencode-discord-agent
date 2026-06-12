@@ -1,6 +1,7 @@
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v10";
 import { commands } from "./discord/commands";
+import { botLog, botError } from "./logging";
 
 interface DiscordCommand {
   id: string;
@@ -29,7 +30,7 @@ export async function registerCommands() {
     const guildRoute = Routes.applicationGuildCommands(CLIENT_ID, ALLOWED_GUILD_ID);
     const guildCommands = await getDiscordCommands(rest, guildRoute);
     if (guildCommands.length > 0) {
-      console.log(
+      botLog(
         `Deleting ${guildCommands.length} guild command(s):`,
         guildCommands.map((cmd) => cmd.name).join(", "),
       );
@@ -45,7 +46,7 @@ export async function registerCommands() {
   const stale = existing.filter((cmd) => !localNames.has(cmd.name));
 
   if (stale.length > 0) {
-    console.log(
+    botLog(
       `Removing ${stale.length} stale command(s):`,
       stale.map((cmd) => cmd.name).join(", "),
     );
@@ -54,15 +55,15 @@ export async function registerCommands() {
     );
   }
 
-  console.log(`Registering ${commandData.length} command(s)...`);
+  botLog(`Registering ${commandData.length} command(s)...`);
   await rest.put(route, { body: commandData });
-  console.log("Successfully registered application commands.");
+  botLog("Successfully registered application commands.");
 }
 
 // CLI entry point — run directly via `bun run src/deploy-commands.ts`
 if (import.meta.path === Bun.main) {
   registerCommands().catch((err) => {
-    console.error("Failed to register commands:", err);
+    botError("Failed to register commands:", err);
     process.exit(1);
   });
 }

@@ -4,9 +4,9 @@ import { poll, heartbeat, checkForUpdates } from "./polling";
 import { killAllProcesses } from "./processes";
 
 async function shutdown(signal: string) {
-  console.log(`[${signal}] Worker shutting down gracefully...`);
+  workerLog(`[${signal}] Worker shutting down gracefully...`);
   const killed = await killAllProcesses();
-  if (killed > 0) console.log(`Force-killed ${killed} child process(es) after graceful shutdown`);
+  if (killed > 0) workerLog(`Force-killed ${killed} child process(es) after graceful shutdown`);
   const { releaseAllJobs } = await import("./state");
   await releaseAllJobs();
   process.exit(0);
@@ -16,13 +16,13 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
 async function main() {
-  console.log(`╔══════════════════════════════════════════════╗`);
-  console.log(`║  Worker ${WORKER_ID.padEnd(10)}                 ║`);
-  console.log(`║  Polling: ${BOT_URL}/trpc          ║`);
-  console.log(`║  Interval: 5s (backoff: up to 60s)          ║`);
-  console.log(`║  Heartbeat: 30s                              ║`);
-  console.log(`║  Mode: ${dryRun ? "🧪 DRY RUN" : "🔧 LIVE".padEnd(23)}           ║`);
-  console.log(`╚══════════════════════════════════════════════╝`);
+  workerLog(`╔══════════════════════════════════════════════╗`);
+  workerLog(`║  Worker ${WORKER_ID.padEnd(10)}                 ║`);
+  workerLog(`║  Polling: ${BOT_URL}/trpc          ║`);
+  workerLog(`║  Interval: 5s (backoff: up to 60s)          ║`);
+  workerLog(`║  Heartbeat: 30s                              ║`);
+  workerLog(`║  Mode: ${dryRun ? "🧪 DRY RUN" : "🔧 LIVE".padEnd(23)}           ║`);
+  workerLog(`╚══════════════════════════════════════════════╝`);
 
   setInterval(() => {
     heartbeat().catch(err => workerLog("Heartbeat error:", err));
@@ -49,4 +49,4 @@ async function main() {
   scheduleNextPoll();
 }
 
-main().catch(console.error);
+main().catch(err => workerLog("Fatal error:", err));

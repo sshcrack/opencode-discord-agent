@@ -1,18 +1,19 @@
 import { AutocompleteInteraction, ButtonInteraction, Message } from "discord.js";
 import { prisma } from "../db";
 import type { Job } from "../db/generated/client";
+import { botLog } from "../logging";
 
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
   const focusedValue = interaction.options.getFocused();
   const focused = typeof focusedValue === "string" ? focusedValue.toLowerCase() : String(focusedValue);
-  console.log("[handleAutocomplete] focused:", focused);
+  botLog("[handleAutocomplete] focused:", focused);
 
   const repos = await prisma.repository.findMany({
     where: { slug: { contains: focused } },
     take: 25,
   });
-  console.log("[handleAutocomplete] found", repos.length, "repos");
+  botLog("[handleAutocomplete] found", repos.length, "repos");
 
   // Filter case-insensitively in JS since SQLite doesn't support mode:"insensitive"
   const filtered = repos.filter(r => r.slug.toLowerCase().includes(focused));
@@ -27,7 +28,7 @@ export async function handleButton(interaction: ButtonInteraction) {
     return;
   }
 
-  console.log("[handleButton] customId:", interaction.customId, "user:", interaction.user.tag);
+  botLog("[handleButton] customId:", interaction.customId, "user:", interaction.user.tag);
   const parts = interaction.customId.split(":");
   const action = parts[0];
   const jobIdStr = parts[1];

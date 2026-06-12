@@ -2,6 +2,7 @@ import { SlashCommandBuilder, CommandInteraction, ChannelType, TextChannel } fro
 import type { ReportKind } from "../../db/generated/client";
 import { prisma } from "../../db";
 import { Command } from "./Command";
+import { botLog } from "../../logging";
 
 export class CreateReportCommand extends Command {
   data = new SlashCommandBuilder()
@@ -31,7 +32,7 @@ export class CreateReportCommand extends Command {
     if (!interaction.isChatInputCommand()) return;
     const kind: ReportKind = interaction.options.getString("kind", true) as ReportKind;
     const repoSlug = interaction.options.getString("repo");
-    console.log("[CreateReportCommand] kind:", kind, "repoSlug:", repoSlug);
+    botLog("[CreateReportCommand] kind:", kind, "repoSlug:", repoSlug);
 
     if (!interaction.channel || !interaction.channel.isTextBased() || interaction.channel.isThread() || !("threads" in interaction.channel)) {
       await interaction.reply({

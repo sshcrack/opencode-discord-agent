@@ -2,6 +2,7 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { handlePlanGet, handlePlanPut, handlePlanApprove } from "./planApi";
 import { prisma } from "../db";
+import { botLog, botError } from "../logging";
 
 let trpcServer: ReturnType<typeof Bun.serve> | null = null;
 
@@ -42,7 +43,7 @@ export function stopTRPCServer() {
 }
 
 export async function gracefulShutdown(): Promise<void> {
-  console.log("[Shutdown] Releasing all in-flight jobs...");
+  botLog("[Shutdown] Releasing all in-flight jobs...");
 
   const result = await prisma.job.updateMany({
     where: {
@@ -63,11 +64,11 @@ export async function gracefulShutdown(): Promise<void> {
     },
   });
 
-  console.log(`[Shutdown] Released ${result.count} job(s)`);
+  botLog(`[Shutdown] Released ${result.count} job(s)`);
 
   stopTRPCServer();
   await prisma.$disconnect();
-  console.log("[Shutdown] Complete");
+  botLog("[Shutdown] Complete");
 }
 
 export function createTRPCServer(port: number) {
@@ -157,7 +158,7 @@ export function createTRPCServer(port: number) {
           router: appRouter,
           createContext: () => ({}),
           onError({ error }) {
-            console.error("tRPC error:", error);
+            botError("tRPC error:", error);
           },
         });
       }
@@ -166,5 +167,5 @@ export function createTRPCServer(port: number) {
     },
   });
 
-  console.log(`tRPC server listening on port ${port}`);
+  botLog(`tRPC server listening on port ${port}`);
 }

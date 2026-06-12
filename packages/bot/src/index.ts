@@ -6,6 +6,7 @@ import { handleAutocomplete, handleButton } from "./discord/interactions";
 import { recordAnswer, cancelQuestions, goBack, approveAnswers, redoQuestions } from "./discord/questions";
 import { createTRPCServer } from "./trpc/server";
 import { checkWorkerOnline } from "./discord/fallback";
+import { botLog, botWarn, botError } from "./logging";
 
 const {
   DISCORD_TOKEN,
@@ -41,14 +42,13 @@ const client = new Client({
 globalThis.__discord_client = client;
 
 client.once(Events.ClientReady, async (c) => {
-  console.log(`Logged in as ${c.user.tag}`);
+  botLog(`Logged in as ${c.user.tag}`);
 
-  // Register slash commands with Discord on every startup
   try {
     await registerCommands();
-    console.log("[Startup] Slash commands registered");
+    botLog("[Startup] Slash commands registered");
   } catch (err) {
-    console.error("[Startup] Failed to register slash commands:", err);
+    botError("[Startup] Failed to register slash commands:", err);
   }
 
   createTRPCServer(parseInt(TRPC_PORT));
@@ -80,10 +80,10 @@ client.once(Events.ClientReady, async (c) => {
         try {
           const ch = await client.channels.fetch(repo.channelId);
           if (!ch) {
-            console.warn(`[Startup] Channel ${repo.channelId} for repo ${repo.slug} no longer exists`);
+            botWarn(`[Startup] Channel ${repo.channelId} for repo ${repo.slug} no longer exists`);
           }
         } catch {
-          console.warn(`[Startup] Failed to fetch channel ${repo.channelId} for repo ${repo.slug} — removing stale mapping`);
+          botWarn(`[Startup] Failed to fetch channel ${repo.channelId} for repo ${repo.slug} — removing stale mapping`);
           await prisma.repository.update({
             where: { id: repo.id },
             data: { channelId: null },
@@ -98,7 +98,7 @@ client.once(Events.ClientReady, async (c) => {
               data: { channelId: existing.id },
             });
             boundCount++;
-            console.log(`[Startup] Bound existing channel #${existing.name} (${existing.id}) to repo ${repo.slug}`);
+            botLog(`[Startup] Bound existing channel #${existing.name} (${existing.id}) to repo ${repo.slug}`);
           } else {
             // No matching channel exists — create one
             try {
@@ -111,7 +111,7 @@ client.once(Events.ClientReady, async (c) => {
                   type: ChannelType.GuildCategory,
                   reason: "Auto-created for startup repo channel sync",
                 });
-                console.log("[Startup] Created Repositories category");
+                botLog("[Startup] Created Repositories category");
               }
 
               const created = await guild.channels.create({
@@ -126,9 +126,9 @@ client.once(Events.ClientReady, async (c) => {
                 data: { channelId: created.id },
               });
               createdCount++;
-              console.log(`[Startup] Created channel #${repo.slug} (${created.id}) for repo ${repo.slug}`);
+              botLog(`[Startup] Created channel #${repo.slug} (${created.id}) for repo ${repo.slug}`);
             } catch (err) {
-              console.error(`[Startup] Failed to create channel for repo ${repo.slug}:`, err);
+              botError(`[Startup] Failed to create channel for repo ${repo.slug}:`, err);
             }
           }
         }
@@ -136,10 +136,10 @@ client.once(Events.ClientReady, async (c) => {
     }
 
     if (createdCount > 0 || boundCount > 0) {
-      console.log(`[Startup] Repo channel sync complete — created ${createdCount}, bound ${boundCount}`);
+      botLog(`[Startup] Repo channel sync complete — created ${createdCount}, bound ${boundCount}`);
     }
   } catch (err) {
-    console.error("[Startup] Repo channel reconciliation error:", err);
+    botError("[Startup] Repo channel reconciliation error:", err);
   }
 
   const updatePresence = async () => {
@@ -151,7 +151,7 @@ client.once(Events.ClientReady, async (c) => {
         c.user.setPresence({ activities: [{ name: "Worker offline" }], status: "idle" });
       }
     } catch (err) {
-      console.error("Failed to update presence:", err);
+      botError("Failed to update presence:", err);
     }
   };
 
@@ -207,17 +207,17 @@ client.once(Events.ClientReady, async (c) => {
           },
         });
         if (result.count > 0) {
-          console.log(`[Stale-job sweep] Released ${result.count} job(s) from dead workers: ${staleWorkerIds.join(", ")}`);
+          botLog(`[Stale-job sweep] Released ${result.count} job(s) from dead workers: ${staleWorkerIds.join(", ")}`);
         }
       }
     } catch (err) {
-      console.error("[Stale-job sweep] Error:", err);
+      botError("[Stale-job sweep] Error:", err);
     }
   }, 60_000);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  console.log("[InteractionCreate]", {
+  botLog("[InteractionCreate]", {
     type: interaction.type,
     id: interaction.id,
     user: interaction.user?.tag,
@@ -233,7 +233,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   try {
     if (!checkAccess(interaction)) {
-      console.log("[Access] Denied for user", interaction.user?.id, "guild", interaction.guildId);
+      botLog("[Access] Denied for user", interaction.user?.id, "guild", interaction.guildId);
       if (interaction.isRepliable()) {
         await interaction.reply({ content: ":x: You are not authorized to use this bot", ephemeral: true });
       }
@@ -241,13 +241,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isCommand()) {
-      console.log("[Command] Name:", interaction.commandName);
+      botLog("[Command] Name:", interaction.commandName);
       await handleCommand(interaction);
     } else if (interaction.isAutocomplete()) {
-      console.log("[Autocomplete] Focused option:", interaction.options.getFocused());
+      botLog("[Autocomplete] Focused option:", interaction.options.getFocused());
       await handleAutocomplete(interaction);
     } else if (interaction.isButton()) {
-      console.log("[Button] Custom ID:", interaction.customId);
+      botLog("[Button] Custom ID:", interaction.customId);
       if (
         interaction.customId.startsWith("ask_ans:") ||
         interaction.customId.startsWith("ask_cancel:") ||
@@ -303,7 +303,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleButton(interaction);
     }
   } catch (err) {
-    console.error("Interaction error:", err);
+    botError("Interaction error:", err);
     if (interaction.isRepliable()) {
       await interaction.reply({ content: ":x: An error occurred", ephemeral: true }).catch(() => {});
     }
@@ -333,14 +333,14 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 process.on("SIGTERM", async () => {
-  console.log("[SIGTERM] Shutting down gracefully...");
+  botLog("[SIGTERM] Shutting down gracefully...");
   const { gracefulShutdown } = await import("./trpc/server");
   await gracefulShutdown();
   process.exit(0);
 });
 
 process.on("SIGINT", async () => {
-  console.log("[SIGINT] Shutting down gracefully...");
+  botLog("[SIGINT] Shutting down gracefully...");
   const { gracefulShutdown } = await import("./trpc/server");
   await gracefulShutdown();
   process.exit(0);

@@ -1,5 +1,6 @@
 import { Client, ActionRowBuilder, ButtonBuilder } from "discord.js";
 import { prisma } from "../db";
+import { botError } from "../logging";
 
 const DISCORD_UNKNOWN_CHANNEL = 10003;
 
@@ -12,7 +13,7 @@ export function getClient() {
 }
 
 async function handleStaleThread(threadId: string, action: string) {
-  console.error(`[Stale thread] ${action}: thread ${threadId} not found on Discord, marking associated jobs as failed`);
+  botError(`[Stale thread] ${action}: thread ${threadId} not found on Discord, marking associated jobs as failed`);
   try {
     const terminal: import("../db/generated/client").JobStatus[] = ["done", "failed", "cancelled"];
     await prisma.job.updateMany({
@@ -20,7 +21,7 @@ async function handleStaleThread(threadId: string, action: string) {
       data: { status: "failed" },
     });
   } catch (dbErr) {
-    console.error(`[Stale thread] Failed to update jobs for thread ${threadId}:`, dbErr);
+    botError(`[Stale thread] Failed to update jobs for thread ${threadId}:`, dbErr);
   }
 }
 
@@ -44,7 +45,7 @@ export async function postToThread(threadId: string, content: string) {
       await channel.send(content);
     }
   } catch (err) {
-    console.error(`Failed to post to thread ${threadId}:`, err);
+    botError(`Failed to post to thread ${threadId}:`, err);
   }
 }
 
@@ -56,7 +57,7 @@ export async function closeThread(threadId: string) {
       await channel.setArchived(true);
     }
   } catch (err) {
-    console.error(`Failed to close thread ${threadId}:`, err);
+    botError(`Failed to close thread ${threadId}:`, err);
   }
 }
 
@@ -67,7 +68,7 @@ export async function postToThreadWithComponents(threadId: string, row: ActionRo
       await channel.send({ components: [row] });
     }
   } catch (err) {
-    console.error(`Failed to post components to thread ${threadId}:`, err);
+    botError(`Failed to post components to thread ${threadId}:`, err);
   }
 }
 
@@ -78,6 +79,6 @@ export async function renameThread(threadId: string, name: string) {
       await channel.setName(name);
     }
   } catch (err) {
-    console.error(`Failed to rename thread ${threadId}:`, err);
+    botError(`Failed to rename thread ${threadId}:`, err);
   }
 }

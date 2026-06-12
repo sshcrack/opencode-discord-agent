@@ -410,7 +410,7 @@ if (cmd === "ask") {
     const message = err instanceof Error ? err.message : String(err);
     jobLog(job.id, `Job FAILED after ${elapsed}s: ${message}`);
     if (err instanceof Error && err.stack) jobLog(job.id, `Stack: ${err.stack}`);
-    console.error(err);
+    jobLog(job.id, String(err));
     if (helperPath) Bun.spawnSync(["rm", "-f", helperPath]);
     await client.postStatus.mutate({
       jobId: job.id,

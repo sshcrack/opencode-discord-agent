@@ -1,15 +1,16 @@
+import { createConsola } from "consola";
 import { WORKER_ID } from "./env";
 
-function timestamp(): string {
-  return new Date().toISOString().slice(11, 23);
-}
+const rootLogger = createConsola({
+  formatOptions: { date: true, colors: false, compact: true },
+}).withTag(`Worker ${WORKER_ID}`);
 
 function workerLog(...args: unknown[]) {
-  console.log(`[Worker ${WORKER_ID} ${timestamp()}]`, ...args);
+  rootLogger.info(args.length === 1 ? args[0] : args);
 }
 
 function jobLog(jobId: number, ...args: unknown[]) {
-  console.log(`[Worker ${WORKER_ID} ${timestamp()}] [Job #${jobId}]`, ...args);
+  rootLogger.withTag(`Job #${jobId}`).info(args.length === 1 ? args[0] : args);
 }
 
 export { workerLog, jobLog };

@@ -1,6 +1,7 @@
 import { CommandInteraction } from "discord.js";
 import { Command } from "./Command";
 import { RepoCommand } from "./repo";
+import { botLog, botWarn } from "../../logging";
 import { CreateReportCommand } from "./create-report";
 import { SubmitCommand } from "./submit";
 import { SetAutoCommand } from "./set-auto";
@@ -41,12 +42,12 @@ for (const cmd of commandInstances) {
 
 export async function handleCommand(interaction: CommandInteraction) {
   const { commandName } = interaction;
-  console.log("[handleCommand] Dispatching", commandName, "for user", interaction.user.tag);
+  botLog("[handleCommand] Dispatching", commandName, "for user", interaction.user.tag);
 
   const cmd = commandMap.get(commandName);
   if (cmd) {
     await cmd.execute(interaction);
   } else {
-    console.warn("[handleCommand] Unknown command:", commandName);
+    botWarn("[handleCommand] Unknown command:", commandName);
   }
 }

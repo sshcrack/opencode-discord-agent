@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, CommandInteraction } from "discord.js";
 import { Command } from "./Command";
+import { botError } from "../../logging";
 import { prisma } from "../../db";
 import { gracefulShutdown } from "../../trpc/server";
 
@@ -45,7 +46,7 @@ export class UpdateCommand extends Command {
     } else {
       const generate = Bun.spawnSync(["bunx", "--bun", "prisma", "generate"], { cwd: botDir });
       if (generate.exitCode !== 0) {
-        console.error(`prisma generate failed: ${generate.stderr.toString().slice(0, 500)}`);
+        botError(`prisma generate failed: ${generate.stderr.toString().slice(0, 500)}`);
       }
     }
 

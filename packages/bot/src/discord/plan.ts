@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import { prisma } from "../db";
 import { discordFetch } from './helpers';
+import { botWarn } from '../logging';
 import crypto from "node:crypto";
 
 export async function postPlan(
@@ -36,7 +37,7 @@ export async function postPlan(
     return { success: false, error: "Thread not found" };
   }
   if (!ch.isThread()) {
-    console.warn(`Channel ${job.threadId} is not a thread`);
+    botWarn(`Channel ${job.threadId} is not a thread`);
     return { success: false, error: "Channel is not a thread" };
   }
 
