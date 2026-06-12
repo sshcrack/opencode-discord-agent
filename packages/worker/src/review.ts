@@ -28,6 +28,11 @@ async function runReviewAgent(
     throw err;
   }
 
+  // Delete stale review file from previous iteration
+  try {
+    Bun.spawnSync(["rm", "-f", reviewFilePath]);
+  } catch { /* not present — fine */ }
+
   const iterationNote = iteration > 0
     ? `\n\nThis is iteration ${iteration + 1} of the review loop. Previous issues were reported to be fixed — verify they are resolved.`
     : "";
@@ -68,8 +73,10 @@ async function runReviewAgent(
   const reviewFile = Bun.file(reviewFilePath);
   const exists = await reviewFile.exists();
   if (!exists) {
-    jobLog(job.id, `Review file not found at ${reviewFilePath}, assuming clean`);
-    return { clean: true, summary: "Review file not found — assuming no issues" };
+    throw new Error(
+      `Review agent did not write output file at ${reviewFilePath}. ` +
+      `The review agent may have crashed or timed out.`
+    );
   }
 
   const content = await reviewFile.text();
@@ -78,8 +85,14 @@ async function runReviewAgent(
     jobLog(job.id, `Review result: clean=${result.clean}, issues=${result.issues?.length ?? 0}`);
     return result;
   } catch (err) {
-    jobLog(job.id, `Failed to parse review JSON: ${err}`);
-    return { clean: true, summary: "Failed to parse review output — assuming clean" };
+    if (err instanceof SyntaxError) {
+      throw new Error(
+        `Review agent wrote invalid JSON to ${reviewFilePath}: ${err.message}. ` +
+        `Raw content (first 500 chars): ${content.slice(0, 500)}`,
+        { cause: err },
+      );
+    }
+    throw err;
   }
 }
 
