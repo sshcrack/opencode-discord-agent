@@ -126,6 +126,14 @@ export class ResolveCommand extends Command {
       reason: `Fix job for ${repo.slug}`,
     });
 
+    await prisma.reportThread.create({
+      data: {
+        threadId: thread.id,
+        kind: "bug",
+        repoSlug: repo.slug,
+      },
+    });
+
     await prisma.job.create({
       data: {
         threadId: thread.id,
