@@ -30,7 +30,7 @@ function getBaseBranch(worktreePath: string): string {
   return "main";
 }
 
-async function amendCoauthor(worktreePath: string, jobId: number): Promise<void> {
+async function amendCoauthor(worktreePath: string, jobId: number, branch?: string): Promise<void> {
   if (!hasCoauthor) return;
 
   const baseBranch = getBaseBranch(worktreePath);
@@ -66,7 +66,10 @@ async function amendCoauthor(worktreePath: string, jobId: number): Promise<void>
     return;
   }
 
-  const pushProc = Bun.spawnSync(["git", "push", "--force-with-lease"], { cwd: worktreePath });
+  const pushArgs = branch
+    ? ["push", "--force-with-lease", "origin", `HEAD:${branch}`]
+    : ["push", "--force-with-lease", "--set-upstream", "origin", "HEAD"];
+  const pushProc = Bun.spawnSync(["git", ...pushArgs], { cwd: worktreePath });
   if (pushProc.exitCode !== 0) {
     const errMsg = pushProc.stderr.toString().slice(0, 300);
     jobLog(jobId, `Force push failed: ${errMsg}`);
@@ -234,4 +237,4 @@ Always provide options + a recommended answer.`;
   return { prUrl: prUrl || null, sessionId: sessionId || null };
 }
 
-export { runBuildAgent };
+export { runBuildAgent, amendCoauthor };

@@ -6,11 +6,11 @@ import path from "node:path";
 import { jobLog } from "./logging";
 import { execCommand } from "./exec";
 import { trackProcess } from "./processes";
-import { ensureWorktree, ensureFollowupWorktree, ensureReviewWorktree, cleanupWorktree, getRepoNameWithOwner, setupGitAuthor, getPRBaseBranch } from "./worktree";
+import { ensureWorktree, ensureFollowupWorktree, ensureReviewWorktree, cleanupWorktree, getRepoNameWithOwner, setupGitAuthor } from "./worktree";
 import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
 import { waitForApproval } from "./approval";
-import { runBuildAgent } from "./build";
+import { runBuildAgent, amendCoauthor } from "./build";
 import { runReviewAgent } from "./review";
 import { mergePR } from "./merge";
 import { runOpencodeStreaming } from "./opencode";
@@ -181,16 +181,23 @@ if (cmd === "ask") {
         return;
       }
 
-      // Fetch PR base branch to ensure merge diff is computed correctly
-      const baseBranch = await getPRBaseBranch(repoPath, prUrl, job.id);
-      if (baseBranch !== followUpBranch) {
-        jobLog(job.id, `Resetting worktree to PR base branch: ${baseBranch}`);
-        await execCommand("git", ["fetch", "origin", baseBranch], worktreePath, job.id);
-        await execCommand("git", ["reset", "--hard", `origin/${baseBranch}`], worktreePath, job.id);
-      }
-
       await setupGitAuthor(worktreePath, job.id);
       await postInfo(job.id, "Git author configured for fix commits");
+
+      // Query PR info for fix agent push target
+      const prInfoRaw = await execCommand(
+        "gh",
+        ["pr", "view", prUrl, "--json", "headRefName,headRepository,baseRefName",
+         "--jq", "{headRefName: .headRefName, headRepo: .headRepository.nameWithOwner, baseRefName: .baseRefName}"],
+        repoPath,
+        job.id,
+      );
+      const prInfo = JSON.parse(prInfoRaw.trim()) as {
+        headRefName: string;
+        headRepo: string;
+        baseRefName: string;
+      };
+      jobLog(job.id, `PR head: ${prInfo.headRefName} on ${prInfo.headRepo}, base: ${prInfo.baseRefName}`);
 
       const maxIterations = 3;
       let clean = false;
@@ -236,8 +243,12 @@ if (cmd === "ask") {
           const fixPrompt = [
             `Fix the following issues found by the code review agent:`,
             review.issues?.map(i => `- **${i.file}**${i.line ? `:${i.line}` : ""}: ${i.description}`).join("\n") ?? "",
-            `After fixing all issues, commit with a clear message and push to the existing branch.`,
-            `Do NOT create a new PR — update the existing one.`,
+            `The PR is at ${prUrl}.`,
+            `The PR's source branch is \`${prInfo.headRefName}\` on \`${prInfo.headRepo}\`.`,
+            `After fixing all issues, commit and push to update the PR:`,
+            `  git add -A && git commit -m "fix: <description>"`,
+            `  git push origin HEAD:${prInfo.headRefName}`,
+            `Do NOT create a new PR — update the existing one at ${prUrl}.`,
             `Use ${helperPath} for Discord messages.`,
           ].join("\n\n");
 
@@ -249,6 +260,9 @@ if (cmd === "ask") {
           ];
 
           await runOpencodeStreaming(job.id, worktreePath, undefined, fixArgs);
+          await amendCoauthor(worktreePath, job.id, prInfo.headRefName).catch((err) => {
+            jobLog(job.id, `amendCoauthor failed (non-fatal): ${err}`);
+          });
           jobLog(job.id, `Fix iteration ${iteration + 1} completed`);
         }
       }
