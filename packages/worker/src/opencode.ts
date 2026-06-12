@@ -67,7 +67,7 @@ async function runOpencodeStreaming(
   planFilePath: string | undefined,
   argv: string[],
   extraArgs: string[] = [],
-): Promise<{ planMd: string; sessionId: string }> {
+): Promise<{ planMd: string; sessionId: string; issueNumber: number | null }> {
   const fullArgs = [...argv, "--format", "json", ...skipPermissionsArg, ...extraArgs];
   jobLog(jobId, `Spawning: ${fullArgs.join(" ")}`);
 
@@ -217,7 +217,15 @@ async function runOpencodeStreaming(
     jobLog(jobId, `No session ID detected`);
   }
 
-  return { planMd: planMd || "", sessionId: sessionId || `fallback-${jobId}` };
+  let issueNumber: number | null = null;
+  const allText = textParts.join("\n");
+  const issueMatch = allText.match(/https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/(\d+)/);
+  if (issueMatch) {
+    issueNumber = parseInt(issueMatch[1]!, 10);
+    jobLog(jobId, `Detected issue #${issueNumber} in agent output`);
+  }
+
+  return { planMd: planMd || "", sessionId: sessionId || `fallback-${jobId}`, issueNumber };
 }
 
 export { runOpencodeStreaming };
