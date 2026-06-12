@@ -6,7 +6,7 @@ import { Command } from "./Command";
 export class CloseCommand extends Command {
   data = new SlashCommandBuilder()
     .setName("close")
-    .setDescription("Close this thread and cancel any active job") as SlashCommandBuilder;
+    .setDescription("Close this thread and cancel any active job");
 
   async execute(interaction: CommandInteraction) {
     if (!interaction.isChatInputCommand()) return;

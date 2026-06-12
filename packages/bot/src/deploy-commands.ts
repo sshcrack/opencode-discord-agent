@@ -2,6 +2,15 @@ import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v10";
 import { commands } from "./discord/commands";
 
+interface DiscordCommand {
+  id: string;
+  name: string;
+}
+
+function getDiscordCommands(rest: REST, route: string): Promise<DiscordCommand[]> {
+  return rest.get(route as `/${string}`) as Promise<DiscordCommand[]>;
+}
+
 export async function registerCommands() {
   const { DISCORD_TOKEN, CLIENT_ID: rawClientId, ALLOWED_GUILD_ID } = process.env;
 
@@ -10,12 +19,15 @@ export async function registerCommands() {
 
   const CLIENT_ID: string = rawClientId;
   const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
-  const commandData = commands.map((cmd) => cmd.toJSON());
+  const commandData: Array<{ name: string } & Record<string, unknown>> = commands.map((cmd) => {
+    const json = cmd.toJSON();
+    return json as { name: string } & Record<string, unknown>;
+  });
 
   // Delete all guild commands before switching to global-only
   if (ALLOWED_GUILD_ID) {
     const guildRoute = Routes.applicationGuildCommands(CLIENT_ID, ALLOWED_GUILD_ID);
-    const guildCommands = (await rest.get(guildRoute)) as any[];
+    const guildCommands = await getDiscordCommands(rest, guildRoute);
     if (guildCommands.length > 0) {
       console.log(
         `Deleting ${guildCommands.length} guild command(s):`,
@@ -27,7 +39,7 @@ export async function registerCommands() {
 
   const route = Routes.applicationCommands(CLIENT_ID);
 
-  const existing = (await rest.get(route)) as any[];
+  const existing = await getDiscordCommands(rest, route);
 
   const localNames = new Set(commandData.map((cmd) => cmd.name));
   const stale = existing.filter((cmd) => !localNames.has(cmd.name));

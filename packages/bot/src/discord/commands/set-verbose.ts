@@ -15,7 +15,7 @@ export class SetVerboseCommand extends Command {
           { name: "On (all steps)", value: "on" },
           { name: "Off (success/error only)", value: "off" },
         ),
-    ) as SlashCommandBuilder;
+    );
 
   async execute(interaction: CommandInteraction) {
     if (!interaction.isChatInputCommand()) return;

@@ -4,7 +4,7 @@ import { Command } from "./Command";
 export class ClearSessionCommand extends Command {
   data = new SlashCommandBuilder()
     .setName("clear-session")
-    .setDescription("Delete all bot messages in this thread") as SlashCommandBuilder;
+    .setDescription("Delete all bot messages in this thread");
 
   async execute(interaction: CommandInteraction) {
     if (!interaction.isChatInputCommand()) return;

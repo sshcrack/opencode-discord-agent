@@ -1,16 +1,18 @@
-import { Client, TextChannel, ThreadChannel } from "discord.js";
+import { Client } from "discord.js";
 
-type TextishChannel = TextChannel | ThreadChannel;
+declare global {
+  var __discord_client: Client<boolean>;
+}
 
 export function getClient() {
-  return (globalThis as any).__discord_client as Client<boolean>;
+  return globalThis.__discord_client;
 }
 
 export async function postToThread(threadId: string, content: string) {
   try {
     const channel = await getClient().channels.fetch(threadId);
-    if (channel?.isTextBased()) {
-      await (channel as TextishChannel).send(content);
+    if (channel?.isThread()) {
+      await channel.send(content);
     }
   } catch (err) {
     console.error(`Failed to post to thread ${threadId}:`, err);

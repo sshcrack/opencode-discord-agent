@@ -68,7 +68,7 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
           const trimmed = line.trim();
           if (!trimmed) continue;
           eventCount++;
-          let event: any;
+          let event: unknown;
           try {
             event = JSON.parse(trimmed);
           } catch {
@@ -80,8 +80,12 @@ async function generateIssue(job: Job, repoPath: string): Promise<{ issueNumber:
               .mutate({ jobId: job.id, message: result.message, level: result.level, append: result.append })
               .catch(() => {});
           }
-          if (event.type === "text" && event.part?.text) {
-            issueText += event.part.text;
+          const evt = event as Record<string, unknown>;
+          if (evt.type === "text") {
+            const evtPart = evt.part as Record<string, unknown> | undefined;
+            if (evtPart?.text) {
+              issueText += String(evtPart.text);
+            }
           }
         }
       }

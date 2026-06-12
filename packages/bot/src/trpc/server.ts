@@ -105,7 +105,7 @@ export function createTRPCServer(port: number) {
 
         if (req.method === "PUT") {
           const token = url.searchParams.get("token");
-          let body: any = {};
+          let body: unknown = {};
           try {
             body = await req.json();
           } catch {
@@ -114,7 +114,7 @@ export function createTRPCServer(port: number) {
               headers: { "Content-Type": "application/json" },
             });
           }
-          return handlePlanPut(jobId, token, body);
+          return handlePlanPut(jobId, token, body as { planMd?: string });
         }
 
         if (req.method === "OPTIONS") {

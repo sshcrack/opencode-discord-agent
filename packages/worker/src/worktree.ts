@@ -26,8 +26,8 @@ async function cleanupWorktree(repoPath: string, branch: string) {
   try {
     jobLog(0, `Cleaning up worktree for branch ${branch}`);
     await execCommand("gwq", ["remove", "-f", branch], repoPath, 0);
-  } catch (err: any) {
-    const msg = err?.message ?? String(err);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("no removable worktrees found")) {
       jobLog(0, `No worktree to remove for ${branch} (already clean)`);
     } else {

@@ -1,5 +1,5 @@
 import { WORKER_ID, dryRun } from "./env";
-import { client, type Job } from "./trpc";
+import { client } from "./trpc";
 import { workerLog } from "./logging";
 import { registerJob, unregisterJob, isEmpty } from "./state";
 import { handleJob } from "./handleJob";

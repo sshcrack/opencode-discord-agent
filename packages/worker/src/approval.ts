@@ -25,7 +25,7 @@ async function waitForApproval(
     let current: Awaited<ReturnType<typeof client.getJobStatus.query>>;
     try {
       current = await client.getJobStatus.query({ jobId, workerId: WORKER_ID });
-    } catch (err) {
+    } catch {
       jobLog(jobId, `Approval poll #${pollCount} failed (network error), retrying`);
       continue;
     }

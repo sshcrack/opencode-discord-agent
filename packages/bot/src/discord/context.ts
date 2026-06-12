@@ -4,7 +4,7 @@ const MAX_ATTACHMENT_SIZE = 10_000;
 
 async function downloadAttachmentContent(
   url: string,
-  filename: string,
+  _filename: string,
 ): Promise<string | null> {
   try {
     const response = await fetch(url);
@@ -12,14 +12,14 @@ async function downloadAttachmentContent(
 
     const contentType = response.headers.get("content-type") || "";
     const isText =
-      /^text\//.test(contentType) ||
-      /^application\/json/.test(contentType) ||
-      /^application\/xml/.test(contentType) ||
-      /^application\/yaml/.test(contentType) ||
-      /^application\/x-yaml/.test(contentType) ||
-      /^application\/javascript/.test(contentType) ||
-      /^application\/x-shellscript/.test(contentType) ||
-      /^application\/octet-stream/.test(contentType) ||
+      contentType.startsWith('text/') ||
+      contentType.startsWith('application/json') ||
+      contentType.startsWith('application/xml') ||
+      contentType.startsWith('application/yaml') ||
+      contentType.startsWith('application/x-yaml') ||
+      contentType.startsWith('application/javascript') ||
+      contentType.startsWith('application/x-shellscript') ||
+      contentType.startsWith('application/octet-stream') ||
       contentType.includes("charset=");
 
     if (!isText) return null;
@@ -38,7 +38,7 @@ async function downloadAttachmentContent(
 export async function buildContext(messages: Message[]): Promise<string> {
   const sorted = messages
     .filter((m) => !m.author.bot)
-    .reverse();
+    .toReversed();
 
   const parts: string[] = [];
 

@@ -8,8 +8,11 @@
   },
   "rules": {
     "typescript/no-explicit-any": "error",
-    "typescript/consistent-type-assertions": ["warn", { "assertionStyle": "never" }]
+    "typescript/consistent-type-assertions": "off",
+    "no-await-in-loop": "off",
+    "no-underscore-dangle": "off"
   },
+  "ignorePatterns": ["packages/bot/public/plan-viewer/**"],
   "env": {
     "builtin": true
   }

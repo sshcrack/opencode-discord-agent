@@ -3,13 +3,9 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
-  TextChannel,
-  ThreadChannel,
 } from "discord.js";
 import { prisma } from "../db";
 import { getClient, postToThread } from "./helpers";
-
-type TextishChannel = TextChannel | ThreadChannel;
 
 interface Question {
   q: string;
@@ -87,13 +83,13 @@ async function showNextQuestion(threadId: string, jobId: number, questions: Ques
   }
 
   const channel = await getClient().channels.fetch(threadId);
-  if (!channel?.isTextBased()) return;
+  if (!channel?.isThread()) return;
 
   if (reporterId) {
-    await (channel as TextishChannel).send({ content: `<@${reporterId}>` });
+    await channel.send({ content: `<@${reporterId}>` });
   }
 
-  const msg = await (channel as TextishChannel).send({ embeds: [embed], components: rows });
+  const msg = await channel.send({ embeds: [embed], components: rows });
 
   await prisma.job.update({
     where: { id: jobId },
@@ -117,8 +113,8 @@ async function recordAnswer(jobId: number, answer: string) {
   if (job.statusMessageId) {
     try {
       const channel = await getClient().channels.fetch(job.threadId);
-      if (channel?.isTextBased()) {
-        const msg = await (channel as TextishChannel).messages.fetch(job.statusMessageId);
+      if (channel?.isThread()) {
+        const msg = await channel.messages.fetch(job.statusMessageId);
         const embed = EmbedBuilder.from(msg.embeds[0]!).setColor(0x57F287);
         embed.setTitle((embed.data.title ?? "").replace("❓", "✅"));
         embed.setDescription(`**${question.q}**\n\n📝 *${answer}*`);
@@ -160,8 +156,8 @@ async function cancelQuestions(jobId: number) {
   if (job.statusMessageId) {
     try {
       const channel = await getClient().channels.fetch(job.threadId);
-      if (channel?.isTextBased()) {
-        const msg = await (channel as TextishChannel).messages.fetch(job.statusMessageId);
+      if (channel?.isThread()) {
+        const msg = await channel.messages.fetch(job.statusMessageId);
         const embed = EmbedBuilder.from(msg.embeds[0]!).setColor(0xED4245);
         embed.setTitle("❌ Cancelled");
         await msg.edit({ embeds: [embed], components: [] });

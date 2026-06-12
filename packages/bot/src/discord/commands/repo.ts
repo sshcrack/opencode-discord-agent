@@ -43,7 +43,7 @@ export class RepoCommand extends Command {
         .addStringOption(o =>
           o.setName("slug").setDescription("Repository slug").setRequired(true).setAutocomplete(true),
         ),
-    ) as SlashCommandBuilder;
+    );
 
   async execute(interaction: CommandInteraction) {
     if (!interaction.isChatInputCommand()) return;
@@ -71,7 +71,7 @@ export class RepoCommand extends Command {
           let parentId: string | null = null;
 
           if (interaction.channel && "parent" in interaction.channel) {
-            const cat = (interaction.channel as any).parent as GuildChannel | null;
+            const cat = (interaction.channel as unknown as { parent: GuildChannel | null }).parent;
             if (cat) parentId = cat.id;
           }
 
@@ -132,7 +132,7 @@ export class RepoCommand extends Command {
         try {
           const channel = await getClient().channels.fetch(repo.channelId);
           if (channel?.isTextBased() && "delete" in channel) {
-            await (channel as any).delete(`Repository ${slug} removed`);
+            await (channel as { delete: (reason?: string) => Promise<unknown> }).delete(`Repository ${slug} removed`);
           }
         } catch (err) {
           console.warn(`[RepoCommand] Failed to delete channel ${repo.channelId}:`, err);

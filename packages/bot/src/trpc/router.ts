@@ -25,11 +25,22 @@ import {
   ReleaseWorkerJobsOutput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
-import { postToThread, renameThread, closeThread, getClient } from "../discord/helpers";
+import { postToThread, renameThread, getClient } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
-import { showNextQuestion, recordAnswer, formatQaBlock } from "../discord/questions";
+import { showNextQuestion, formatQaBlock } from "../discord/questions";
 import type { Job } from "../db/generated/client";
-import { TextChannel, ThreadChannel } from "discord.js";
+
+function parseQuestions(
+  data: string,
+): { q: string; options: string[]; recommended: number }[] {
+  return JSON.parse(data);
+}
+
+function parseAnswers(
+  data: string,
+): { q: string; a: string }[] {
+  return JSON.parse(data);
+}
 
 function toJobOutput(job: Job) {
   return {
@@ -266,8 +277,8 @@ export const appRouter = t.router({
     .mutation(async ({ input }) => {
       try {
         const channel = await getClient().channels.fetch(input.threadId);
-        if (channel?.isTextBased()) {
-          await (channel as TextChannel | ThreadChannel).sendTyping();
+        if (channel?.isThread()) {
+          await channel.sendTyping();
         }
         return { success: true };
       } catch {
@@ -326,8 +337,8 @@ export const appRouter = t.router({
       const job = await prisma.job.findUnique({ where: { id: input.jobId } });
       if (!job || !job.pendingQuestions) return { answered: false, formatted: null };
 
-      const questions = JSON.parse(job.pendingQuestions) as { q: string; options: string[]; recommended: number }[];
-      const pendingAnswers = job.pendingAnswers ? JSON.parse(job.pendingAnswers) as { q: string; a: string }[] : [];
+      const questions = parseQuestions(job.pendingQuestions);
+      const pendingAnswers = job.pendingAnswers ? parseAnswers(job.pendingAnswers) : [];
       const currentIdx = job.pendingQuestionIndex ?? 0;
 
       if (currentIdx >= questions.length) {

@@ -10,7 +10,7 @@ import crypto from "node:crypto";
 
 export async function postPlan(
   job: { id: number; threadId: string; autoMode: boolean; reporterId: string | null },
-  planMd: string,
+  _planMd: string,
 ) {
   const token = crypto.randomUUID();
 

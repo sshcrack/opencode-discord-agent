@@ -6,7 +6,7 @@ import { gracefulShutdown } from "../../trpc/server";
 export class UpdateCommand extends Command {
   data = new SlashCommandBuilder()
     .setName("update")
-    .setDescription("Pull latest changes and restart bot") as SlashCommandBuilder;
+    .setDescription("Pull latest changes and restart bot");
 
   async execute(interaction: CommandInteraction) {
     if (!interaction.isChatInputCommand()) return;

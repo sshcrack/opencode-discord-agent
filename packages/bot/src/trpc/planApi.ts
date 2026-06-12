@@ -34,7 +34,7 @@ async function postToThread(threadId: string, message: string) {
   }
 }
 
-function jsonResponse(data: any, status = 200) {
+function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {

@@ -1,6 +1,6 @@
 import { AutocompleteInteraction, ButtonInteraction, Message } from "discord.js";
 import { prisma } from "../db";
-import { postPlan } from "./plan";
+
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
   const focusedValue = interaction.options.getFocused();

@@ -25,11 +25,11 @@ export class CreateReportCommand extends Command {
         .setDescription("Repository slug (defaults to default)")
         .setRequired(false)
         .setAutocomplete(true),
-    ) as SlashCommandBuilder;
+    );
 
   async execute(interaction: CommandInteraction) {
     if (!interaction.isChatInputCommand()) return;
-    const kind = interaction.options.getString("kind", true);
+    const kind: ReportKind = interaction.options.getString("kind", true) as ReportKind;
     const repoSlug = interaction.options.getString("repo");
     console.log("[CreateReportCommand] kind:", kind, "repoSlug:", repoSlug);
 
@@ -62,12 +62,12 @@ export class CreateReportCommand extends Command {
       const channel = interaction.channel as TextChannel;
       const thread = await channel.threads.create({
         name: threadName,
-        type: ChannelType.PrivateThread,
+        type: ChannelType.GuildPrivateThread,
         reason: `New ${kind} report for ${boundRepo.slug}`,
       });
 
       await prisma.reportThread.create({
-        data: { threadId: thread.id, kind: kind as ReportKind, repoSlug: boundRepo.slug },
+        data: { threadId: thread.id, kind, repoSlug: boundRepo.slug },
       });
 
       await interaction.reply(`:white_check_mark: Report thread created: ${thread}`);
@@ -117,12 +117,12 @@ export class CreateReportCommand extends Command {
 
     const thread = await channel.threads.create({
       name: threadName,
-      type: ChannelType.PrivateThread,
+      type: ChannelType.GuildPrivateThread,
       reason: `New ${kind} report for ${slug}`,
     });
 
     await prisma.reportThread.create({
-      data: { threadId: thread.id, kind: kind as ReportKind, repoSlug: slug },
+      data: { threadId: thread.id, kind, repoSlug: slug },
     });
 
     await interaction.reply(`:white_check_mark: Report thread created: ${thread}`);

@@ -36,7 +36,7 @@ async function main() {
   let pollInterval = 5_000;
   const scheduleNextPoll = () => {
     setTimeout(() => {
-      poll().then(success => {
+      poll().then(() => {
         pollInterval = 5_000;
         scheduleNextPoll();
       }).catch(err => {

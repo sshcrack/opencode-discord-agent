@@ -45,15 +45,17 @@ async function runOpencodeStreaming(
         if (!trimmed) continue;
         lineCount++;
 
-        let event: any;
+        let event: unknown;
         try {
           event = JSON.parse(trimmed);
         } catch {
           continue;
         }
 
-        if (!sessionId && event.sessionID) {
-          sessionId = event.sessionID;
+        const evt = event as Record<string, unknown>;
+
+        if (!sessionId && evt.sessionID) {
+          sessionId = String(evt.sessionID);
           jobLog(jobId, `Session: ${sessionId}`);
         }
 
@@ -64,8 +66,11 @@ async function runOpencodeStreaming(
             .catch(() => {});
         }
 
-        if (event.type === "text" && event.part?.text?.trim()) {
-          textParts.push(event.part.text.trim());
+        if (evt.type === "text") {
+          const evtPart = evt.part as Record<string, unknown> | undefined;
+          if (evtPart && String(evtPart.text ?? "").trim()) {
+            textParts.push(String(evtPart.text));
+          }
         }
       }
     }

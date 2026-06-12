@@ -5,24 +5,25 @@ function shortPath(filePath: string, cwd?: string): string {
     const rel = filePath.slice(cwd.length).replace(/^\//, "");
     const parts = rel.split("/");
     if (parts.length <= 3) return rel;
-    return "…/" + parts.slice(-2).join("/");
+    return "\u2026/" + parts.slice(-2).join("/");
   }
   const parts = filePath.split("/");
   if (parts.length <= 3) return filePath;
-  return "…/" + parts.slice(-2).join("/");
+  return "\u2026/" + parts.slice(-2).join("/");
 }
 
-function formatToolUse(part: any, cwd?: string): EventResult {
-  const tool = part.tool as string;
-  const state = part.state || {};
-  const input = state.input || {};
+function formatToolUse(part: unknown, cwd?: string): EventResult {
+  const p = part as Record<string, unknown>;
+  const tool = String(p.tool ?? "");
 
   switch (tool) {
     case "read": {
-      const path = input.filePath || "";
+      const s = p.state as Record<string, unknown> | undefined;
+      const input = (s?.input ?? {}) as Record<string, unknown>;
+      const path = String(input.filePath ?? "");
       if (!path) return null;
-      const display = state.metadata?.display;
-      if (display?.type === "directory") {
+      const display = s?.metadata as Record<string, unknown> | undefined;
+      if ((display as Record<string, unknown> | undefined)?.type === "directory") {
         return { message: `📂 \`${shortPath(path, cwd)}\``, level: "debug", append: true };
       }
       return { message: `📖 \`${shortPath(path, cwd)}\``, level: "debug", append: true };
@@ -30,42 +31,56 @@ function formatToolUse(part: any, cwd?: string): EventResult {
 
     case "write":
     case "create": {
-      const path = input.filePath || input.path || "";
+      const s = p.state as Record<string, unknown> | undefined;
+      const input = (s?.input ?? {}) as Record<string, unknown>;
+      const path = String(input.filePath || input.path || "");
       return { message: `✏️ Writing \`${shortPath(path, cwd)}\``, level: "info", append: true };
     }
 
     case "edit": {
-      const path = input.filePath || "";
-      const oldStr = (input.oldString || "").split("\n")[0]?.trim().slice(0, 60) || "";
+      const s = p.state as Record<string, unknown> | undefined;
+      const input = (s?.input ?? {}) as Record<string, unknown>;
+      const path = String(input.filePath ?? "");
+      const oldStr = (String(input.oldString ?? "")).split("\n")[0]?.trim().slice(0, 60) || "";
       const desc = oldStr ? ` — \`${oldStr}…\`` : "";
       return { message: `✏️ Editing \`${shortPath(path, cwd)}\`${desc}`, level: "info", append: true };
     }
 
     case "delete": {
-      const path = input.filePath || "";
+      const s = p.state as Record<string, unknown> | undefined;
+      const input = (s?.input ?? {}) as Record<string, unknown>;
+      const path = String(input.filePath ?? "");
       return { message: `🗑️ Deleting \`${shortPath(path, cwd)}\``, level: "info", append: true };
     }
 
     case "bash": {
-      const cmd = (input.command || "").trim();
+      const s = p.state as Record<string, unknown> | undefined;
+      const input = (s?.input ?? {}) as Record<string, unknown>;
+      const cmd = String(input.command ?? "").trim();
       if (!cmd) return null;
-      const display = cmd.length > 80 ? cmd.slice(0, 80) + "…" : cmd;
+      const display = cmd.length > 80 ? cmd.slice(0, 80) + "\u2026" : cmd;
       return { message: `💻 \`${display}\``, level: "info", append: true };
     }
 
     case "grep":
     case "search": {
-      const pattern = input.pattern || input.query || "";
+      const s = p.state as Record<string, unknown> | undefined;
+      const input = (s?.input ?? {}) as Record<string, unknown>;
+      const pattern = String(input.pattern || (input.query ?? ""));
       return { message: `🔍 \`${pattern}\``, level: "debug", append: true };
     }
 
     case "glob": {
-      const pattern = input.pattern || "";
+      const s = p.state as Record<string, unknown> | undefined;
+      const input = (s?.input ?? {}) as Record<string, unknown>;
+      const pattern = String(input.pattern ?? "");
       return { message: `🔍 \`${pattern}\``, level: "debug", append: true };
     }
 
     case "todowrite": {
-      const todos = input.todos || [];
+      const s = p.state as Record<string, unknown> | undefined;
+      const input = (s?.input ?? {}) as Record<string, unknown>;
+      const todos = (input.todos ?? []) as Array<Record<string, unknown>>;
       if (!todos.length) return null;
       const statusIcons: Record<string, string> = {
         pending: "🔲",
@@ -73,9 +88,9 @@ function formatToolUse(part: any, cwd?: string): EventResult {
         completed: "✅",
         cancelled: "❌",
       };
-      const lines = todos.map((t: any) => {
-        const icon = statusIcons[t.status] || "🔲";
-        return `${icon} ${t.content}`;
+      const lines = todos.map((t: Record<string, unknown>) => {
+        const icon = statusIcons[String(t.status ?? "")] || "🔲";
+        return `${icon} ${String(t.content ?? "")}`;
       });
       return { message: `📋 **Tasks:**\n${lines.join("\n")}`, level: "info", append: true };
     }
@@ -85,9 +100,10 @@ function formatToolUse(part: any, cwd?: string): EventResult {
   }
 }
 
-function handleJsonEvent(event: any, jobId: number, cwd: string): EventResult {
-  const type = event.type as string;
-  const part = event.part || {};
+function handleJsonEvent(event: unknown, jobId: number, cwd: string): EventResult {
+  const e = event as Record<string, unknown>;
+  const type = String(e.type ?? "");
+  const part = (e.part ?? {}) as Record<string, unknown>;
 
   switch (type) {
     case "step_start": {
@@ -95,9 +111,9 @@ function handleJsonEvent(event: any, jobId: number, cwd: string): EventResult {
     }
 
     case "reasoning": {
-      const text = (part.text || "").trim();
+      const text = String(part.text ?? "").trim();
       if (!text) return null;
-      const truncated = text.length > 300 ? text.slice(0, 300) + "…" : text;
+      const truncated = text.length > 300 ? text.slice(0, 300) + "\u2026" : text;
       return { message: `💭 ${truncated}`, level: "debug", append: true };
     }
 
@@ -108,9 +124,9 @@ function handleJsonEvent(event: any, jobId: number, cwd: string): EventResult {
 
     case "text": {
       if (part.type !== "text") return null;
-      const text = (part.text || "").trim();
+      const text = String(part.text ?? "").trim();
       if (!text) return null;
-      const truncated = text.length > 500 ? text.slice(0, 500) + "…" : text;
+      const truncated = text.length > 500 ? text.slice(0, 500) + "\u2026" : text;
       return { message: truncated, level: "info", append: true };
     }
 

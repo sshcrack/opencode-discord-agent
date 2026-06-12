@@ -7,8 +7,8 @@ import path from "node:path";
 function parseNameWithOwner(originUrl: string): string | null {
   // git@github.com:owner/name.git  or  https://github.com/owner/name.git
   const match =
-    originUrl.match(/github\.com[:\/](.+?)\.git$/) ||
-    originUrl.match(/github\.com[:\/](.+?)(\/)?$/);
+    originUrl.match(/github\.com[:/](.+?)\.git$/) ||
+    originUrl.match(/github\.com[:/](.+?)(\/)?$/);
   return match?.[1] ?? null;
 }
 
@@ -28,21 +28,6 @@ async function cloneRepo(repoSlug: string, originUrl: string): Promise<string> {
     throw new Error(`Git clone failed: ${stderr.slice(0, 500)}`);
   }
   return tmpDir;
-}
-
-async function getRepoNameWithOwner(repoPath: string): Promise<string> {
-  try {
-    const proc = Bun.spawn(
-      ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
-      { cwd: repoPath, stdout: "pipe", stderr: "pipe" },
-    );
-    const stdout = await new Response(proc.stdout).text();
-    const exitCode = await proc.exited;
-    if (exitCode === 0) return stdout.trim();
-    return "";
-  } catch {
-    return "";
-  }
 }
 
 export async function runFallback(

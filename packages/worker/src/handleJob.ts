@@ -62,8 +62,8 @@ async function handleJob(job: Job) {
         jobLog(job.id, `Parent job #${job.parentJobId} not found — treating as fresh job`);
         isFollowUp = false;
       }
-    } catch (err: any) {
-      jobLog(job.id, `Failed to fetch parent job #${job.parentJobId}: ${err?.message ?? err}`);
+    } catch (err: unknown) {
+      jobLog(job.id, `Failed to fetch parent job #${job.parentJobId}: ${err instanceof Error ? err.message : String(err)}`);
       isFollowUp = false;
     }
   }
@@ -281,15 +281,16 @@ if (cmd === "ask") {
     }
 
     cleanupWorktree(repoPath, branch).catch(() => {});
-  } catch (err: any) {
+  } catch (err: unknown) {
     const elapsed = ((performance.now() - jobStart) / 1000).toFixed(1);
-    jobLog(job.id, `Job FAILED after ${elapsed}s: ${err?.message ?? String(err)}`);
-    if (err?.stack) jobLog(job.id, `Stack: ${err.stack}`);
+    const message = err instanceof Error ? err.message : String(err);
+    jobLog(job.id, `Job FAILED after ${elapsed}s: ${message}`);
+    if (err instanceof Error && err.stack) jobLog(job.id, `Stack: ${err.stack}`);
     console.error(err);
     if (helperPath) Bun.spawnSync(["rm", "-f", helperPath]);
     await client.postStatus.mutate({
       jobId: job.id,
-      message: `Job failed: ${err?.message ?? String(err)}`,
+      message: `Job failed: ${message}`,
       level: "error",
     });
   }

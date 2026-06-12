@@ -14,7 +14,7 @@ export class SetQuickCommand extends Command {
           { name: "On", value: "on" },
           { name: "Off", value: "off" },
         ),
-    ) as SlashCommandBuilder;
+    );
 
   async execute(interaction: CommandInteraction) {
     if (!interaction.isChatInputCommand()) return;

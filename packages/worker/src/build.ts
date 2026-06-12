@@ -111,7 +111,6 @@ Always provide options + a recommended answer.`;
   });
 
   if (prView.exitCode !== 0) {
-    const stderr = prView.stderr.toString().trim().slice(0, 400);
     // PR might not exist yet — try creating it
     const createView = Bun.spawnSync(["gh", "pr", "create", "--fill", "--json", "url", "--jq", ".url"], {
       cwd: worktreePath,

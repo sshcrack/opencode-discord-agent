@@ -4,11 +4,11 @@ function timestamp(): string {
   return new Date().toISOString().slice(11, 23);
 }
 
-function workerLog(...args: any[]) {
+function workerLog(...args: unknown[]) {
   console.log(`[Worker ${WORKER_ID} ${timestamp()}]`, ...args);
 }
 
-function jobLog(jobId: number, ...args: any[]) {
+function jobLog(jobId: number, ...args: unknown[]) {
   console.log(`[Worker ${WORKER_ID} ${timestamp()}] [Job #${jobId}]`, ...args);
 }
 

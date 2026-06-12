@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Events, TextChannel, ThreadChannel, ChannelType } from "discord.js";
+import { Client, GatewayIntentBits, Events, ChannelType } from "discord.js";
 import { prisma } from "./db";
 import { registerCommands } from "./deploy-commands";
 import { handleCommand } from "./discord/commands";
@@ -18,6 +18,12 @@ const {
 if (!DISCORD_TOKEN) throw new Error("DISCORD_TOKEN is required");
 if (!SHARED_SECRET) throw new Error("SHARED_SECRET is required");
 
+function parsePendingQuestions(
+  data: string,
+): { q: string; options: string[]; recommended: number }[] {
+  return JSON.parse(data);
+}
+
 function checkAccess(interaction: { guildId: string | null; user?: { id: string } }): boolean {
   if (ALLOWED_GUILD_ID && interaction.guildId !== ALLOWED_GUILD_ID) return false;
   if (ALLOWED_USER_ID && interaction.user?.id !== ALLOWED_USER_ID) return false;
@@ -32,7 +38,7 @@ const client = new Client({
   ],
 });
 
-(globalThis as any).__discord_client = client;
+globalThis.__discord_client = client;
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`Logged in as ${c.user.tag}`);
@@ -54,8 +60,8 @@ client.once(Events.ClientReady, async (c) => {
   if (updateChannel?.value) {
     try {
       const ch = await client.channels.fetch(updateChannel.value);
-      if (ch?.isTextBased()) {
-        await (ch as TextChannel).send("Done.");
+      if (ch?.isTextBased() && "send" in ch) {
+        await ch.send("Done.");
       }
     } catch {
       // channel might be gone
@@ -222,7 +228,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             await interaction.reply({ content: ":x: No pending questions for this job.", ephemeral: true });
             return;
           }
-          const questions = JSON.parse(job.pendingQuestions) as { q: string; options: string[]; recommended: number }[];
+          const questions = parsePendingQuestions(job.pendingQuestions);
           const currentIdx = job.pendingQuestionIndex ?? 0;
           const answer = questions[currentIdx]?.options[optionIdx] ?? "Unknown";
           await interaction.reply({ content: `✅ Selected: ${answer}`, ephemeral: true });
@@ -254,7 +260,7 @@ client.on(Events.MessageCreate, async (message) => {
     });
     if (!job) return;
 
-    const questions = JSON.parse(job.pendingQuestions!) as { q: string; options: string[]; recommended: number }[];
+    const questions = parsePendingQuestions(job.pendingQuestions!);
     const currentIdx = job.pendingQuestionIndex ?? 0;
     if (currentIdx >= questions.length) return;
 

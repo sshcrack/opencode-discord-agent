@@ -13,7 +13,7 @@ export class SubmitCommand extends Command {
     )
     .addBooleanOption(o =>
       o.setName("quick").setDescription("Skip planning, build directly").setRequired(false),
-    ) as SlashCommandBuilder;
+    );
 
   async execute(interaction: CommandInteraction) {
     if (!interaction.isChatInputCommand()) return;
@@ -110,7 +110,7 @@ export class SubmitCommand extends Command {
     while (true) {
       const fetched: Collection<string, Message> = await thread.messages.fetch({ limit: 100, ...(lastId ? { before: lastId } : {}) });
       if (fetched.size === 0) break;
-      messages.unshift(...fetched.reverse().values());
+      messages.unshift(...[...fetched.values()].toReversed());
       const last = fetched.last();
       if (!last) break;
       lastId = last.id;

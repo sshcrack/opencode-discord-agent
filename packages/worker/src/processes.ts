@@ -3,8 +3,8 @@ const activeProcesses = new Set<Bun.Subprocess>();
 function trackProcess<T extends Bun.Subprocess>(proc: T): T {
   activeProcesses.add(proc);
   proc.exited
-    .then(() => activeProcesses.delete(proc as Bun.Subprocess))
-    .catch(() => activeProcesses.delete(proc as Bun.Subprocess));
+    .then(() => activeProcesses.delete(proc))
+    .catch(() => activeProcesses.delete(proc));
   return proc;
 }
 
