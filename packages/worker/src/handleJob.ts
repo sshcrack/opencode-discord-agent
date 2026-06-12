@@ -54,8 +54,9 @@ async function handleJob(job: Job) {
   if (job.parentJobId) {
     isFollowUp = true;
     jobLog(job.id, `This is a follow-up to job #${job.parentJobId}`);
+    let parent: Awaited<ReturnType<typeof client.getJobStatus.query>> | null = null;
     try {
-      const parent = await client.getJobStatus.query({ jobId: job.parentJobId, workerId: WORKER_ID });
+      parent = await client.getJobStatus.query({ jobId: job.parentJobId, workerId: WORKER_ID });
       if (parent) {
         followUpSession = parent.buildSessionId;
         followUpIssueNumber = parent.issueNumber;

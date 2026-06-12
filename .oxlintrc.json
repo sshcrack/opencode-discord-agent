@@ -10,10 +10,24 @@
     "typescript/no-explicit-any": "error",
     "typescript/consistent-type-assertions": "off",
     "no-await-in-loop": "off",
-    "no-underscore-dangle": "off"
+    "no-underscore-dangle": "off",
+
+    "no-undef": "error",
+    "no-console": "warn",
+    "no-var": "error",
+    "prefer-const": "warn",
+
+    "typescript/prefer-optional-chain": "warn",
+    "typescript/prefer-nullish-coalescing": "warn",
+    "typescript/return-await": "warn"
   },
   "ignorePatterns": ["packages/bot/public/plan-viewer/**"],
   "env": {
-    "builtin": true
-  }
+    "builtin": true,
+    "node": true,
+    "browser": true
+  },
+  "globals": {
+    "Bun": "readonly"
+  },
 }
