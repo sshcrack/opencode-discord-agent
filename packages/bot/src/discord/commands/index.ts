@@ -8,6 +8,7 @@ import { SetVerboseCommand } from "./set-verbose";
 import { ClearSessionCommand } from "./clear-session";
 import { SetQuickCommand } from "./set-quick";
 import { UpdateCommand } from "./update";
+import { CloseCommand } from "./close";
 
 const commandInstances: Command[] = [
   new RepoCommand(),
@@ -18,6 +19,7 @@ const commandInstances: Command[] = [
   new SetVerboseCommand(),
   new ClearSessionCommand(),
   new UpdateCommand(),
+  new CloseCommand(),
 ];
 
 export const commands = commandInstances.map(c => c.data);

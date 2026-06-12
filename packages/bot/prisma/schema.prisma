@@ -43,6 +43,7 @@ model ReportThread {
   threadId  String     @unique
   kind      ReportKind
   repoSlug  String
+  closedAt  DateTime?
   createdAt DateTime  @default(now())
   jobs      Job[]
 }

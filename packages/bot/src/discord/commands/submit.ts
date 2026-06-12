@@ -33,6 +33,14 @@ export class SubmitCommand extends Command {
       return;
     }
 
+    if (reportThread.closedAt) {
+      await interaction.reply({
+        content: ":lock: This thread has been closed. Create a new report thread with `/create-report`",
+        ephemeral: true,
+      });
+      return;
+    }
+
     // Unarchive thread if it was previously archived
     if (thread.archived || thread.locked) {
       await thread.setLocked(false);
