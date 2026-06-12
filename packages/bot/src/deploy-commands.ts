@@ -60,7 +60,9 @@ export async function registerCommands() {
 }
 
 // CLI entry point — run directly via `bun run src/deploy-commands.ts`
-registerCommands().catch((err) => {
-  console.error("Failed to register commands:", err);
-  process.exit(1);
-});
+if (import.meta.path === Bun.main) {
+  registerCommands().catch((err) => {
+    console.error("Failed to register commands:", err);
+    process.exit(1);
+  });
+}
