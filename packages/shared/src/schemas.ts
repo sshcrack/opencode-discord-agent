@@ -199,3 +199,8 @@ export const ReleaseWorkerJobsInput = z.object({
 export const ReleaseWorkerJobsOutput = z.object({
   released: z.number(),
 });
+
+export const CreateReviewMergeJobInput = z.object({
+  parentJobId: z.number(),
+  threadId: z.string(),
+});

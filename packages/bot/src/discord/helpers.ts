@@ -1,4 +1,4 @@
-import { Client } from "discord.js";
+import { Client, ActionRowBuilder, ButtonBuilder } from "discord.js";
 import { prisma } from "../db";
 
 const DISCORD_UNKNOWN_CHANNEL = 10003;
@@ -57,6 +57,17 @@ export async function closeThread(threadId: string) {
     }
   } catch (err) {
     console.error(`Failed to close thread ${threadId}:`, err);
+  }
+}
+
+export async function postToThreadWithComponents(threadId: string, row: ActionRowBuilder<ButtonBuilder>) {
+  try {
+    const channel = await discordFetch(threadId);
+    if (channel?.isThread()) {
+      await channel.send({ components: [row] });
+    }
+  } catch (err) {
+    console.error(`Failed to post components to thread ${threadId}:`, err);
   }
 }
 

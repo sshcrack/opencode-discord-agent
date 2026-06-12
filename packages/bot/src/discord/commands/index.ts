@@ -10,6 +10,7 @@ import { SetQuickCommand } from "./set-quick";
 import { UpdateCommand } from "./update";
 import { CloseCommand } from "./close";
 import { ResolveCommand } from "./resolve";
+import { ReviewMergeCommand } from "./review-merge";
 
 const commandInstances: Command[] = [
   new RepoCommand(),
@@ -22,6 +23,7 @@ const commandInstances: Command[] = [
   new UpdateCommand(),
   new CloseCommand(),
   new ResolveCommand(),
+  new ReviewMergeCommand(),
 ];
 
 export const commands = commandInstances.map(c => c.data);

@@ -1,5 +1,6 @@
 import { AutocompleteInteraction, ButtonInteraction, Message } from "discord.js";
 import { prisma } from "../db";
+import type { Job } from "../db/generated/client";
 
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
@@ -101,6 +102,40 @@ export async function handleButton(interaction: ButtonInteraction) {
           .followUp({ content: "⏰ No suggestion received within 5 minutes.", ephemeral: true })
           .catch(() => { });
       }
+    });
+  } else if (action === "review_merge") {
+    const parentJob = await prisma.job.findUnique({ where: { id: jobId } });
+    if (!parentJob || !parentJob.prUrl) {
+      await interaction.reply({ content: ":x: This job has no PR to review", ephemeral: true });
+      return;
+    }
+
+    const activeStatuses: Job["status"][] = ["pending", "claimed", "planning", "plan_ready", "approved", "building"];
+    const existingActive = await prisma.job.findFirst({
+      where: { threadId: parentJob.threadId, status: { in: activeStatuses } },
+    });
+    if (existingActive) {
+      await interaction.reply({ content: ":x: There's already an active job in this thread", ephemeral: true });
+      return;
+    }
+
+    await prisma.job.create({
+      data: {
+        threadId: parentJob.threadId,
+        repoSlug: parentJob.repoSlug,
+        kind: "other",
+        status: "pending",
+        context: "review-merge",
+        reporterId: interaction.user.id,
+        autoMode: true,
+        quickMode: true,
+        parentJobId: jobId,
+      },
+    });
+
+    await interaction.update({
+      content: "✅ Review & Merge job created! Waiting for worker...",
+      components: [],
     });
   }
 }

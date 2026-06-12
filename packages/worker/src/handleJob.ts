@@ -10,6 +10,8 @@ import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
 import { waitForApproval } from "./approval";
 import { runBuildAgent } from "./build";
+import { runReviewAgent } from "./review";
+import { mergePR } from "./merge";
 import { runOpencodeStreaming } from "./opencode";
 
 async function handleJob(job: Job) {
@@ -43,6 +45,7 @@ async function handleJob(job: Job) {
   const jobStart = performance.now();
   let helperPath = "";
   let isFollowUp = false;
+  let isReviewMerge = false;
   let followUpSession: string | null = null;
   let followUpIssueNumber: number | null = null;
   let followUpBranch: string | null = null;
@@ -65,6 +68,11 @@ async function handleJob(job: Job) {
     } catch (err: unknown) {
       jobLog(job.id, `Failed to fetch parent job #${job.parentJobId}: ${err instanceof Error ? err.message : String(err)}`);
       isFollowUp = false;
+    }
+
+    if (parent?.prUrl && job.context === "review-merge") {
+      isReviewMerge = true;
+      jobLog(job.id, `Review-merge job detected — parent job has PR: ${parent.prUrl}`);
     }
   }
 
@@ -127,6 +135,112 @@ if (cmd === "ask") {
     await Bun.write(helperPath, helperScript);
     Bun.spawnSync(["chmod", "700", helperPath]);
     jobLog(job.id, `Discord helper created at ${helperPath}`);
+
+    // ── Review-Merge Workflow ─────────────────────────────────────────────
+    if (isReviewMerge) {
+      const parent = await client.getJobStatus.query({ jobId: job.parentJobId!, workerId: WORKER_ID });
+      const prUrl = parent?.prUrl;
+      if (!prUrl) {
+        await client.postStatus.mutate({ jobId: job.id, message: "Parent job has no PR URL", level: "error" });
+        await client.cancelJob.mutate({ jobId: job.id });
+        cleanupWorktree(repoPath, branch).catch(() => {});
+        return;
+      }
+
+      const maxIterations = 3;
+      let clean = false;
+
+      for (let iteration = 0; iteration < maxIterations && !clean; iteration++) {
+        await client.postStatus.mutate({
+          jobId: job.id,
+          message: `🔍 Review iteration ${iteration + 1}/${maxIterations}...`,
+          level: "info",
+        });
+
+        const review = await runReviewAgent(job, worktreePath, prUrl, helperPath, iteration);
+
+        if (review.clean) {
+          clean = true;
+          await client.postStatus.mutate({
+            jobId: job.id,
+            message: `✅ Review passed — no issues found`,
+            level: "success",
+          });
+        } else {
+          const issueCount = review.issues?.length ?? 0;
+          const isLastIteration = iteration >= maxIterations - 1;
+
+          if (isLastIteration) {
+            await client.postStatus.mutate({
+              jobId: job.id,
+              message: `⚠️ Max iterations reached (${maxIterations}). ${issueCount} issue(s) remain. Merging anyway.`,
+              level: "info",
+            });
+            clean = true;
+            break;
+          }
+
+          await client.postStatus.mutate({
+            jobId: job.id,
+            message: `🔧 Found ${issueCount} issue(s) — running fix agent...`,
+            level: "info",
+          });
+
+          const fixPrompt = [
+            `Fix the following issues found by the code review agent:`,
+            review.issues?.map(i => `- **${i.file}**${i.line ? `:${i.line}` : ""}: ${i.description}`).join("\n") ?? "",
+            `After fixing all issues, commit with a clear message and push to the existing branch.`,
+            `Do NOT create a new PR — update the existing one.`,
+            `Use ${helperPath} for Discord messages.`,
+          ].join("\n\n");
+
+          const fixArgs = [
+            "opencode", "run",
+            "--agent", "build",
+            "--dir", worktreePath,
+            fixPrompt,
+          ];
+
+          await runOpencodeStreaming(job.id, worktreePath, undefined, fixArgs);
+          jobLog(job.id, `Fix iteration ${iteration + 1} completed`);
+        }
+      }
+
+      const mergeResult = await mergePR(job.id, worktreePath, prUrl);
+
+      if (mergeResult.success) {
+        await client.postStatus.mutate({
+          jobId: job.id,
+          message: mergeResult.method === "auto-merge"
+            ? `✅ Auto-merge enabled — PR will merge when CI passes`
+            : `✅ PR merged via squash merge`,
+          level: "success",
+        });
+
+        await client.markComplete.mutate({
+          jobId: job.id,
+          prUrl,
+          branch,
+        }).catch((err) => {
+          jobLog(job.id, `Failed to mark job complete: ${err}`);
+        });
+      } else {
+        await client.postStatus.mutate({
+          jobId: job.id,
+          message: `❌ Merge failed: ${mergeResult.error ?? "Unknown error"}`,
+          level: "error",
+        });
+        await client.postStatus.mutate({
+          jobId: job.id,
+          message: `💡 You may need to resolve conflicts or merge manually: ${prUrl}`,
+          level: "info",
+        });
+      }
+
+      cleanupWorktree(repoPath, branch).catch(() => {});
+      Bun.spawnSync(["rm", "-f", helperPath]);
+      return;
+    }
 
     // ── Step 2: Issue generation (skip for follow-ups) ────────────────────
     let issueNumber = job.issueNumber ?? followUpIssueNumber;

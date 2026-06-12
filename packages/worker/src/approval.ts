@@ -112,7 +112,7 @@ async function waitForApproval(
         const prompt = [
           `You are a planning agent for a ${current.kind} task on repository ${current.repoSlug}.${issueRef}`,
           `Review the codebase and write a detailed implementation plan based on this suggestion: "${suggestion}".`,
-          `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
+          `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured. When using mermaid diagrams, make sure to use double quotes for labels like so: K --> L["event.setRawAudio(translated)"], otherwise the diagrams won't render correctly.`,
           `The plan should cover: files to change, approach, and any risk areas.`,
           current.autoMode ? writeInstruction : "",
           current.context ? `\n\nDiscord report context:\n${current.context}` : "",
