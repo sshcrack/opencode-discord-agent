@@ -10,6 +10,9 @@ import { SetQuickCommand } from "./set-quick";
 import { UpdateCommand } from "./update";
 import { CloseCommand } from "./close";
 import { ResolveCommand } from "./resolve";
+import { HelpCommand } from "./help";
+import { JobsCommand } from "./jobs";
+import { SettingsCommand } from "./settings";
 import { ReviewMergeCommand } from "./review-merge";
 
 const commandInstances: Command[] = [
@@ -19,6 +22,9 @@ const commandInstances: Command[] = [
   new SetAutoCommand(),
   new SetQuickCommand(),
   new SetVerboseCommand(),
+  new HelpCommand(),
+  new JobsCommand(),
+  new SettingsCommand(),
   new ClearSessionCommand(),
   new UpdateCommand(),
   new CloseCommand(),

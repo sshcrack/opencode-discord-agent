@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { jobLog } from "./logging";
 import { trackProcess } from "./processes";
-import { createWorktree, createFollowupWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
+import { ensureWorktree, ensureFollowupWorktree, cleanupWorktree, getRepoNameWithOwner } from "./worktree";
 import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
 import { waitForApproval } from "./approval";
@@ -84,15 +84,15 @@ async function handleJob(job: Job) {
     if (isFollowUp && followUpBranch) {
       jobLog(job.id, "Step 1/5: Creating follow-up worktree from parent branch...");
       await postInfo(job.id, "Creating worktree from parent branch...");
-      branch = `followup-${job.id}-${Date.now().toString(36)}`;
-      worktreePath = await createFollowupWorktree(repoPath, followUpBranch, branch, job.id);
+      branch = `followup-${job.id}`;
+      worktreePath = await ensureFollowupWorktree(repoPath, followUpBranch, branch, job.id);
       jobLog(job.id, `Follow-up worktree created at ${worktreePath} on branch ${branch}`);
     } else {
       jobLog(job.id, "Step 1/5: Creating worktree...");
       await postInfo(job.id, "Creating worktree...");
-      branch = `report-${job.id}-${Date.now().toString(36)}`;
+      branch = `report-${job.id}`;
       const stepStart = performance.now();
-      worktreePath = await createWorktree(repoPath, branch, job.id);
+      worktreePath = await ensureWorktree(repoPath, branch, job.id);
       jobLog(job.id, `Worktree created at ${worktreePath} (${(performance.now() - stepStart).toFixed(0)}ms)`);
     }
 
@@ -455,10 +455,19 @@ async function pollAndInjectAnswers(
       return null;
     }
 
+    if (!status.pendingQuestions) {
+      jobLog(jobId, `Pending questions cleared (${status.status}) — aborting answer wait`);
+      return null;
+    }
+
     if (status.pendingQuestions && status.pendingAnswers) {
       const questions = JSON.parse(status.pendingQuestions);
       const answers = JSON.parse(status.pendingAnswers);
       if (answers.length >= questions.length) {
+        if (status.statusMessageId) {
+          // Overview is still showing — waiting for user to Approve/Redo/Cancel
+          continue;
+        }
         const qaBlock = formatQaBlock(questions, answers);
         jobLog(jobId, `Answers received, injecting into session ${sessionId}`);
         await postInfo(jobId, "✅ Answers received, revising plan...");

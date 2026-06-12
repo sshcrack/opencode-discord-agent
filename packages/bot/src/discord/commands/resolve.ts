@@ -91,29 +91,30 @@ export class ResolveCommand extends Command {
     let threadName: string;
 
     if (parsed) {
-      repo = await resolveRepoFromUrl(parsed.owner, parsed.repo);
-      if (!repo) {
+      const r = await resolveRepoFromUrl(parsed.owner, parsed.repo);
+      if (!r) {
         await interaction.reply({
           content: `:x: No repository found matching \`${parsed.owner}/${parsed.repo}\`. Register it with \`/repo add\``,
           ephemeral: true,
         });
         return;
       }
+      repo = r;
       issueNumber = parsed.issueNumber;
       context = `Resolve GitHub issue: ${issueInput}`;
       threadName = `resolve #${parsed.issueNumber}`;
     } else {
-      repo =
-        (await resolveRepoFromChannel(interaction.channelId)) ??
+      const r = (await resolveRepoFromChannel(interaction.channelId)) ??
         (await resolveDefaultRepo());
 
-      if (!repo) {
+      if (!r) {
         await interaction.reply({
           content: ":x: No repositories registered. Add one with `/repo add` first, or provide a GitHub issue URL",
           ephemeral: true,
         });
         return;
       }
+      repo = r;
 
       context = `Resolve: ${issueInput}`;
       threadName = `resolve-${Date.now().toString(36)}`;

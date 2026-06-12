@@ -27,7 +27,13 @@ function formatQaBlock(questions: Question[], answers: QaPair[]): string {
     .join("\n\n");
 }
 
-async function showNextQuestion(threadId: string, jobId: number, questions: Question[], index: number, reporterId?: string | null) {
+async function showNextQuestion(
+  threadId: string,
+  jobId: number,
+  questions: Question[],
+  index: number,
+  reporterId?: string | null,
+) {
   const question = questions[index];
   if (!question) return;
   const total = questions.length;
@@ -72,15 +78,23 @@ async function showNextQuestion(threadId: string, jobId: number, questions: Ques
 
   if (btnCount > 0) rows.push(currentRow);
 
-  if (rows.length < 5) {
-    const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+  // Navigation row: Back (if not first) + Cancel
+  const navRow = new ActionRowBuilder<ButtonBuilder>();
+  if (index > 0) {
+    navRow.addComponents(
       new ButtonBuilder()
-        .setCustomId(`ask_cancel:${jobId}`)
-        .setLabel("Cancel")
-        .setStyle(ButtonStyle.Danger),
+        .setCustomId(`ask_back:${jobId}`)
+        .setLabel("◀ Back")
+        .setStyle(ButtonStyle.Secondary),
     );
-    rows.push(cancelRow);
   }
+  navRow.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`ask_cancel:${jobId}`)
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Danger),
+  );
+  if (rows.length < 5) rows.push(navRow);
 
   const channel = await discordFetch(threadId);
   if (!channel?.isThread()) return;
@@ -95,6 +109,52 @@ async function showNextQuestion(threadId: string, jobId: number, questions: Ques
     where: { id: jobId },
     data: { statusMessageId: msg.id },
   });
+}
+
+async function showOverview(
+  threadId: string,
+  jobId: number,
+  questions: Question[],
+  answers: QaPair[],
+  reporterId?: string | null,
+): Promise<string> {
+  const lines = questions.map((q, i) => {
+    const a = answers[i]?.a ?? "—";
+    return `**Q${i + 1}:** ${q.q}\n**A${i + 1}:** ${a}`;
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setTitle("✅ All Questions Answered")
+    .setDescription(lines.join("\n\n"))
+    .setFooter({ text: "Review your answers above, then choose an action below." });
+
+  const approveBtn = new ButtonBuilder()
+    .setCustomId(`ask_approve:${jobId}`)
+    .setLabel("Approve")
+    .setStyle(ButtonStyle.Success);
+
+  const redoBtn = new ButtonBuilder()
+    .setCustomId(`ask_redo:${jobId}`)
+    .setLabel("Redo")
+    .setStyle(ButtonStyle.Secondary);
+
+  const cancelBtn = new ButtonBuilder()
+    .setCustomId(`ask_cancel:${jobId}`)
+    .setLabel("Cancel")
+    .setStyle(ButtonStyle.Danger);
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(approveBtn, redoBtn, cancelBtn);
+
+  const channel = await discordFetch(threadId);
+  if (!channel?.isThread()) return "";
+
+  if (reporterId) {
+    await channel.send({ content: `<@${reporterId}>` });
+  }
+
+  const msg = await channel.send({ embeds: [embed], components: [row] });
+  return msg.id;
 }
 
 async function recordAnswer(jobId: number, answer: string) {
@@ -124,17 +184,21 @@ async function recordAnswer(jobId: number, answer: string) {
   }
 
   if (nextIdx >= questions.length) {
+    const overviewMsgId = await showOverview(
+      job.threadId,
+      jobId,
+      questions,
+      pendingAnswers,
+      job.reporterId,
+    );
     await prisma.job.update({
       where: { id: jobId },
       data: {
         pendingQuestionIndex: questions.length,
         pendingAnswers: JSON.stringify(pendingAnswers),
-        statusMessageId: null,
+        statusMessageId: overviewMsgId,
       },
     });
-    const label = questions.length > 1 ? `${questions.length} questions` : "1 question";
-    const mention = job.reporterId ? `<@${job.reporterId}> ` : "";
-    await postToThread(job.threadId, `${mention}✅ All ${label} answered.`);
     return;
   }
 
@@ -147,6 +211,90 @@ async function recordAnswer(jobId: number, answer: string) {
   });
 
   await showNextQuestion(job.threadId, jobId, questions, nextIdx, job.reporterId);
+}
+
+async function goBack(jobId: number) {
+  const job = await prisma.job.findUnique({ where: { id: jobId } });
+  if (!job || !job.pendingQuestions) return;
+
+  const questions: Question[] = JSON.parse(job.pendingQuestions);
+  const pendingAnswers: QaPair[] = job.pendingAnswers ? JSON.parse(job.pendingAnswers) : [];
+  const currentIdx = job.pendingQuestionIndex ?? 0;
+
+  if (currentIdx <= 0) return;
+
+  const prevIdx = currentIdx - 1;
+  pendingAnswers.pop();
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      pendingQuestionIndex: prevIdx,
+      pendingAnswers: JSON.stringify(pendingAnswers),
+    },
+  });
+
+  await showNextQuestion(job.threadId, jobId, questions, prevIdx, job.reporterId);
+}
+
+async function approveAnswers(jobId: number) {
+  const job = await prisma.job.findUnique({ where: { id: jobId } });
+  if (!job) return;
+
+  // Edit the overview message to show confirmed
+  if (job.statusMessageId) {
+    try {
+      const channel = await discordFetch(job.threadId);
+      if (channel?.isThread()) {
+        const msg = await channel.messages.fetch(job.statusMessageId);
+        const embed = EmbedBuilder.from(msg.embeds[0]!).setColor(0x57F287);
+        embed.setTitle("✅ Answers Confirmed");
+        embed.setFooter({ text: "Worker is proceeding with your answers." });
+        await msg.edit({ embeds: [embed], components: [] });
+      }
+    } catch { /* message might be gone */ }
+  }
+
+  // Clear statusMessageId to signal the worker to proceed with injection
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      statusMessageId: null,
+    },
+  });
+
+  const mention = job.reporterId ? `<@${job.reporterId}> ` : "";
+  await postToThread(job.threadId, `${mention}✅ Answers confirmed, proceeding with plan revision.`);
+}
+
+async function redoQuestions(jobId: number) {
+  const job = await prisma.job.findUnique({ where: { id: jobId } });
+  if (!job || !job.pendingQuestions) return;
+
+  const questions: Question[] = JSON.parse(job.pendingQuestions);
+
+  // Clear the overview embed
+  if (job.statusMessageId) {
+    try {
+      const channel = await discordFetch(job.threadId);
+      if (channel?.isThread()) {
+        const msg = await channel.messages.fetch(job.statusMessageId);
+        await msg.delete().catch(() => {});
+      }
+    } catch { /* ignore */ }
+  }
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      pendingQuestionIndex: 0,
+      pendingAnswers: "[]",
+      statusMessageId: null,
+    },
+  });
+
+  await postToThread(job.threadId, "🔄 Redoing questions from the start...");
+  await showNextQuestion(job.threadId, jobId, questions, 0, job.reporterId);
 }
 
 async function cancelQuestions(jobId: number) {
@@ -179,4 +327,12 @@ async function cancelQuestions(jobId: number) {
   await postToThread(job.threadId, `${cancelMention}❌ Question flow cancelled.`);
 }
 
-export { showNextQuestion, recordAnswer, cancelQuestions, formatQaBlock };
+export {
+  showNextQuestion,
+  recordAnswer,
+  goBack,
+  approveAnswers,
+  redoQuestions,
+  cancelQuestions,
+  formatQaBlock,
+};

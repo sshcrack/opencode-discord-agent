@@ -2,13 +2,22 @@ import { dryRun } from "./env";
 import { jobLog } from "./logging";
 import { execCommand } from "./exec";
 
-async function createWorktree(repoPath: string, branch: string, jobId: number): Promise<string> {
+async function ensureWorktree(repoPath: string, branch: string, jobId: number): Promise<string> {
   if (dryRun) {
-    jobLog(jobId, `[DRY RUN] gwq add -b ${branch} (in ${repoPath})`);
-    jobLog(jobId, `[DRY RUN] gwq get ${branch}`);
+    jobLog(jobId, `[DRY RUN] Checking existing worktrees for branch ${branch}`);
+    jobLog(jobId, `[DRY RUN] gwq get ${branch} (in ${repoPath})`);
     jobLog(jobId, `[DRY RUN] Using repo path as worktree (no git worktree created)`);
     return repoPath;
   }
+
+  try {
+    const worktreePath = (await execCommand("gwq", ["get", branch], repoPath, jobId)).trim();
+    jobLog(jobId, `Reusing existing worktree at ${worktreePath} for branch ${branch}`);
+    return worktreePath;
+  } catch {
+    jobLog(jobId, `Branch ${branch} not found in gwq — creating new worktree`);
+  }
+
   jobLog(jobId, `Running: gwq add -b ${branch} (in ${repoPath})`);
   const addStart = performance.now();
   await execCommand("gwq", ["add", "-b", branch], repoPath, jobId);
@@ -50,29 +59,33 @@ async function getRepoNameWithOwner(repoPath: string): Promise<string> {
   }
 }
 
-async function createFollowupWorktree(repoPath: string, parentBranch: string, newBranch: string, jobId: number): Promise<string> {
+async function ensureFollowupWorktree(repoPath: string, parentBranch: string, newBranch: string, jobId: number): Promise<string> {
   if (dryRun) {
-    jobLog(jobId, `[DRY RUN] Create follow-up worktree from ${parentBranch}`);
-    jobLog(jobId, `[DRY RUN] git fetch origin ${parentBranch} (in ${repoPath})`);
-    jobLog(jobId, `[DRY RUN] gwq add -b ${newBranch} (in ${repoPath})`);
+    jobLog(jobId, `[DRY RUN] Checking existing worktrees for branch ${newBranch}`);
+    jobLog(jobId, `[DRY RUN] gwq get ${newBranch} (in ${repoPath})`);
     jobLog(jobId, `[DRY RUN] Using repo path as worktree (no git worktree created)`);
     return repoPath;
   }
 
-  // Fetch the parent branch from remote
+  try {
+    const worktreePath = (await execCommand("gwq", ["get", newBranch], repoPath, jobId)).trim();
+    jobLog(jobId, `Reusing existing follow-up worktree at ${worktreePath} for branch ${newBranch}`);
+    return worktreePath;
+  } catch {
+    jobLog(jobId, `Branch ${newBranch} not found in gwq — creating new follow-up worktree`);
+  }
+
   jobLog(jobId, `Fetching parent branch: origin/${parentBranch}`);
   await execCommand("git", ["fetch", "origin", parentBranch], repoPath, jobId);
 
-  // Create worktree from the parent branch state
   const worktreePath = (await execCommand(
     "gwq", ["add", "-b", newBranch], repoPath, jobId,
   )).trim();
 
-  // Reset the worktree to match the parent branch
   await execCommand("git", ["reset", "--hard", `origin/${parentBranch}`], worktreePath, jobId);
 
   jobLog(jobId, `Follow-up worktree ready at ${worktreePath}, based on ${parentBranch}`);
   return worktreePath;
 }
 
-export { createWorktree, createFollowupWorktree, cleanupWorktree, getRepoNameWithOwner };
+export { ensureWorktree, ensureFollowupWorktree, cleanupWorktree, getRepoNameWithOwner };
