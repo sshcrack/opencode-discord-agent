@@ -225,6 +225,13 @@ if (cmd === "ask") {
         }).catch((err) => {
           jobLog(job.id, `Failed to mark job complete: ${err}`);
         });
+
+        // Close thread immediately for squash merges; auto-merge checked via polling
+        if (mergeResult.method === "squash") {
+          await client.closeJobThread.mutate({ jobId: job.id }).catch((err) => {
+            jobLog(job.id, `Failed to close thread after merge: ${err}`);
+          });
+        }
       } else {
         await client.postStatus.mutate({
           jobId: job.id,
