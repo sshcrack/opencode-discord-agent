@@ -11,6 +11,7 @@ async function runPlanAgent(
   issueNumber: number | null,
   helperPath: string,
   planLabel?: string,
+  discordAllowed: boolean = true,
 ): Promise<{ planMd: string; sessionId: string }> {
   const issueRef = issueNumber ? ` The related GitHub issue is #${issueNumber}.` : "";
   const contextBlock = job.context
@@ -41,11 +42,13 @@ Examples:
 
 If you do NOT have questions, ${writeInstruction.toLowerCase()} Always provide options + a recommended answer.`;
 
-  const helperBlock = `\n\nYou can post messages to the Discord thread and rename it by running:
+  const helperBlock = discordAllowed
+    ? `\n\nYou can post messages to the Discord thread and rename it by running:
   \`${helperPath} info "message"\` — info level
   \`${helperPath} success "message"\` — success message
   \`${helperPath} error "message"\` — error message
-  \`${helperPath} --rename "new name"\` — rename thread` + askBlock;
+  \`${helperPath} --rename "new name"\` — rename thread` + askBlock
+    : "";
   const prompt = [
     `You are a planning agent for a ${job.kind} task on repository ${job.repoSlug}.${issueRef}`,
     `Review the codebase and write a detailed implementation plan.`,

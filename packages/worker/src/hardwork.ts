@@ -10,6 +10,7 @@ function buildSynthesisPrompt(
   job: Job,
   plans: { index: number; planMd: string }[],
   issueNumber: number | null,
+  helperPath?: string,
 ): string {
   const issueRef = issueNumber ? ` The related GitHub issue is #${issueNumber}.` : "";
 
@@ -24,6 +25,24 @@ function buildSynthesisPrompt(
     `The plan should cover: files to change, approach, and any risk areas.`,
     `\n\n## Plans to Evaluate\n\n${plansBlock}`,
     `\n\nWrite the synthesized plan to the plan file path. It must be a single, coherent implementation plan — not a comparison.`,
+    ...(helperPath && !job.autoMode
+      ? [`\n\nIf you have questions, invoke the following script and then STOP — do NOT write the plan yet. Your questions and the answers will be provided in the next prompt, and you will continue from there:
+\`${helperPath} ask '...json...'\`
+
+The \`ask\` command takes a JSON array argument. Each object has:
+  - "q" (required): the question text
+  - "options" (required): proposed answers the user can pick from
+  - "recommended" (required): index of the recommended option
+
+Examples:
+  # One question:
+  ${helperPath} ask '[{"q":"Which approach?","options":["Refactor then build","Build then refactor"],"recommended":0}]'
+
+  # Multiple questions (answered one at a time in Discord):
+  ${helperPath} ask '[{"q":"Priority?","options":["Correctness","Performance","Readability"],"recommended":0},{"q":"Scope?","options":["Minimal","Full"],"recommended":0}]'
+
+If you do NOT have questions, write the synthesized plan. Always provide options + a recommended answer.`]
+      : []),
   ].join("\n\n");
 }
 
@@ -59,7 +78,7 @@ async function runHardworkFlow(
 
   const planPromises = Array.from(
     { length: job.parallelPlanCount },
-    (_, i) => runPlanAgent(job, worktreePath, issueNumber, helperPath, `hardwork-${job.id}-${i}`),
+    (_, i) => runPlanAgent(job, worktreePath, issueNumber, helperPath, `hardwork-${job.id}-${i}`, false),
   );
 
   const results = await Promise.allSettled(planPromises);
@@ -73,7 +92,7 @@ async function runHardworkFlow(
 
   await postInfo(job.id, "Synthesizing plans into final plan...");
 
-  const synthesisPrompt = buildSynthesisPrompt(job, successfulPlans, issueNumber);
+  const synthesisPrompt = buildSynthesisPrompt(job, successfulPlans, issueNumber, helperPath);
   const planDir = path.join(worktreePath, ".opencode", "plans");
   const synthesisPlanFile = path.join(planDir, `plan-synthesis-${job.id}.md`);
 
