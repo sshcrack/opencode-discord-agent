@@ -2,7 +2,7 @@ import { Client, GatewayIntentBits, Events, ChannelType } from "discord.js";
 import { prisma } from "./db";
 import { registerCommands } from "./deploy-commands";
 import { handleCommand } from "./discord/commands";
-import { handleAutocomplete, handleButton } from "./discord/interactions";
+import { handleAutocomplete, handleButton, handleSelectMenu } from "./discord/interactions";
 import { recordAnswer, cancelQuestions, goBack, approveAnswers, redoQuestions } from "./discord/questions";
 import { closeThreadForJob, parsePrUrl } from "./discord/helpers";
 import { createTRPCServer } from "./trpc/server";
@@ -292,6 +292,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } else if (interaction.isAutocomplete()) {
       botLog("[Autocomplete] Focused option:", interaction.options.getFocused());
       await handleAutocomplete(interaction);
+    } else if (interaction.isStringSelectMenu()) {
+      botLog("[SelectMenu] Custom ID:", interaction.customId);
+      await handleSelectMenu(interaction);
     } else if (interaction.isButton()) {
       botLog("[Button] Custom ID:", interaction.customId);
       if (

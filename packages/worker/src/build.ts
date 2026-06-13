@@ -87,6 +87,7 @@ async function runBuildAgent(
   autoMode: boolean,
   quickMode: boolean,
   sessionToResume?: string | null,
+  planFilePath?: string,
 ): Promise<{ prUrl: string | null; sessionId: string | null }> {
   const issueRef = issueNumber
     ? `The related GitHub issue is #${issueNumber} — make sure the PR body contains "Closes #${issueNumber}".`
@@ -150,8 +151,9 @@ Always provide options + a recommended answer.`;
       askBlock,
     ].filter(Boolean).join(" ");
   } else {
+    const planRef = planFilePath ? `Follow the plan in \`${planFilePath}\` exactly` : `Follow the plan in PLAN.md exactly`;
     prompt = [
-      `Follow the plan in PLAN.md exactly to implement the required changes.`,
+      `${planRef} to implement the required changes.`,
       issueRef,
       `When done, commit all changes with a clear message, push the branch, then create a pull request. After creating it, output the pull request URL.`,
       helperBlock,

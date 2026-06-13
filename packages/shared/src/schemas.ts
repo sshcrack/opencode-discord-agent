@@ -56,6 +56,10 @@ export const JobSchema = z.object({
   parentJobId: z.number().nullable(),
   autoMode: z.boolean(),
   quickMode: z.boolean(),
+  hardwork: z.boolean(),
+  parallelPlanCount: z.number(),
+  hardworkPlans: z.string().nullable(),
+  selectedPlanIndex: z.number().nullable(),
   pendingSuggestion: z.string().nullable(),
   planEditToken: z.string().nullish(),
   pendingQuestions: z.string().nullable(),
@@ -212,4 +216,28 @@ export const CloseJobThreadInput = z.object({
 export const CreateReviewMergeJobInput = z.object({
   parentJobId: z.number(),
   threadId: z.string(),
+});
+
+export const HardworkPlanEntry = z.object({
+  index: z.number(),
+  planMd: z.string(),
+  label: z.string(),
+});
+
+export const HardworkPlansReadyInput = z.object({
+  jobId: z.number(),
+  plans: z.array(HardworkPlanEntry),
+  synthesizedPlanMd: z.string(),
+  sessionId: z.string(),
+});
+
+export const ConfirmHardworkPlanInput = z.object({
+  jobId: z.number(),
+  planIndex: z.number(),
+});
+
+export const WaitForSelectionOutput = z.object({
+  selected: z.boolean(),
+  planMd: z.string().nullable(),
+  planIndex: z.number().nullable(),
 });
