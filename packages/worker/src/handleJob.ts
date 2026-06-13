@@ -131,6 +131,13 @@ async function handleJob(job: Job) {
       await postDebug(job.id, `Worktree: \`${worktreePath}\` on branch \`${branch}\``);
     }
 
+    // Persist worktree path for recovery across restarts
+    try {
+      await client.setWorktreePath.mutate({ jobId: job.id, worktreePath });
+    } catch {
+      // non-critical — retried on next handleJob if needed
+    }
+
     // Create Discord helper script for agent use
     helperPath = `/tmp/opencode-discord-${job.id}.ts`;
     const helperScript = `#!/usr/bin/env bun
@@ -492,6 +499,13 @@ if (cmd === "ask") {
       ? `plan-synthesis-${job.id}.md`
       : `plan-${job.id}-${job.repoSlug.replace(/[^a-zA-Z0-9]/g, "-")}.md`;
     const planFilePath = path.join(worktreePath, ".opencode", "plans", planFileName);
+
+    // Ensure the plan file exists on disk before the build agent starts
+    // (handles worker restart scenarios where the file may be missing but planMd is in DB)
+    if (job.planMd) {
+      await Bun.write(planFilePath, job.planMd).catch(() => {});
+    }
+
     const buildResult = await runBuildAgent(
       job, worktreePath, issueNumber, branch, helperPath,
       job.autoMode, job.quickMode,

@@ -53,6 +53,7 @@ model Job {
   threadId          String
   repoSlug          String
   repoPath          String     @default("")
+  worktreePath      String?
   kind              ReportKind
   status            JobStatus  @default(pending)
   context           String?
@@ -83,6 +84,19 @@ model Job {
   thread            ReportThread @relation(fields: [threadId], references: [threadId])
   parent            Job?         @relation("JobChain", fields: [parentJobId], references: [id])
   followUps         Job[]        @relation("JobChain")
+  revisions         PlanRevision[]
+}
+
+model PlanRevision {
+  id             Int      @id @default(autoincrement())
+  jobId          Int
+  revisionNumber Int
+  planMd         String
+  source         String
+  createdAt      DateTime @default(now())
+  job            Job      @relation(fields: [jobId], references: [id])
+
+  @@unique([jobId, revisionNumber])
 }
 
 model Setting {

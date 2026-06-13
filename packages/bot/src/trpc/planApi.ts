@@ -81,6 +81,20 @@ export async function handlePlanPut(
     data: { planMd },
   });
 
+  // Save a revision record for the web editor change
+  const lastRev = await prisma.planRevision.findFirst({
+    where: { jobId },
+    orderBy: { revisionNumber: "desc" },
+  });
+  await prisma.planRevision.create({
+    data: {
+      jobId,
+      revisionNumber: (lastRev?.revisionNumber ?? 0) + 1,
+      planMd,
+      source: "editor",
+    },
+  }).catch(() => {});
+
   await postToThread(job!.threadId, "✏️ Plan was edited by user — submitter can now approve");
 
   return jsonResponse({ success: true });

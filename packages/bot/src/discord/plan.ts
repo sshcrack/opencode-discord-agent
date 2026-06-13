@@ -20,10 +20,18 @@ export async function postPlan(
     data: { planEditToken: token },
   });
 
+  // Get current revision number
+  const lastRev = await prisma.planRevision.findFirst({
+    where: { jobId: job.id },
+    orderBy: { revisionNumber: "desc" },
+  });
+  const revNumber = lastRev?.revisionNumber ?? 0;
+  const revSuffix = revNumber > 0 ? ` (v${revNumber})` : "";
+
   const botUrl = (process.env.BOT_URL || "http://localhost:3000").replace(/\/+$/, "");
   const planUrl = `${botUrl}/plan-viewer/?jobId=${job.id}&token=${token}`;
   const embed = new EmbedBuilder()
-    .setTitle("📋 Planning Complete")
+    .setTitle(`📋 Planning Complete${revSuffix}`)
     .setDescription(
       `📝 [Open and edit the plan](${planUrl})\n` +
       `After editing, submit the updated plan using the link above, or use the buttons below.`
@@ -93,10 +101,18 @@ export async function postPlan(
       .setStyle(ButtonStyle.Danger),
   );
 
+  const historyRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`history:${job.id}`)
+      .setLabel("View history")
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji("📜"),
+  );
+
   if (job.reporterId) {
     await ch.send({ content: `<@${job.reporterId}>` });
   }
-  await ch.send({ embeds: [embed], components: [row] });
+  await ch.send({ embeds: [embed], components: [row, historyRow] });
 
   return { success: true };
 }

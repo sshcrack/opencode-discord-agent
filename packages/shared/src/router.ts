@@ -28,6 +28,11 @@ import {
   HardworkPlansReadyInput,
   ConfirmHardworkPlanInput,
   WaitForSelectionOutput,
+  SavePlanRevisionInput,
+  GetPlanRevisionsInput,
+  GetPlanRevisionsOutput,
+  RestorePlanRevisionInput,
+  SetWorktreePathInput,
 } from "./schemas";
 
 const t = initTRPC.create();
@@ -183,6 +188,34 @@ export const appRouter = t.router({
     .input(GetJobStatusInput)
     .output(WaitForSelectionOutput)
     .query(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  savePlanRevision: t.procedure
+    .input(SavePlanRevisionInput)
+    .output(StatusResult)
+    .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  getPlanRevisions: t.procedure
+    .input(GetPlanRevisionsInput)
+    .output(GetPlanRevisionsOutput)
+    .query(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  restorePlanRevision: t.procedure
+    .input(RestorePlanRevisionInput)
+    .output(StatusResult)
+    .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  setWorktreePath: t.procedure
+    .input(SetWorktreePathInput)
+    .output(StatusResult)
+    .mutation(async () => {
       throw new Error("Not implemented in shared package");
     }),
 });

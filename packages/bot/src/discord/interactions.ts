@@ -1,9 +1,21 @@
-import { AutocompleteInteraction, ButtonInteraction, StringSelectMenuInteraction, Message } from "discord.js";
+import crypto from "node:crypto";
+import {
+  AutocompleteInteraction,
+  ButtonInteraction,
+  StringSelectMenuInteraction,
+  Message,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+} from "discord.js";
 import { prisma } from "../db";
 import type { Job } from "../db/generated/client";
 import { botLog, botError } from "../logging";
 import { closeThreadForJob, parsePrUrl, postToThread } from "./helpers";
 import { handleHardworkPlanSelect, handleHardworkPlanConfirm } from "./hardwork";
+import { postPlan } from "./plan";
 
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
@@ -208,6 +220,17 @@ export async function handleButton(interaction: ButtonInteraction) {
     await handleHardworkPlanConfirm(interaction, jobIdVal, planIndex);
   } else if (action === "go_back_plans") {
     await interaction.update({ content: "↩ Select a plan from the dropdown above", components: [], embeds: [] });
+  } else if (action === "history") {
+    await handleHistoryButton(interaction, jobId);
+  } else if (action === "restore_revision") {
+    const revNum = parseInt(parts[2]!);
+    if (isNaN(revNum)) {
+      await interaction.reply({ content: ":x: Invalid revision number", ephemeral: true });
+      return;
+    }
+    await handleRestoreRevision(interaction, jobId, revNum);
+  } else if (action === "back_current") {
+    await handleBackToCurrent(interaction, jobId);
   }
 }
 
@@ -231,5 +254,159 @@ export async function handleSelectMenu(interaction: StringSelectMenuInteraction)
       return;
     }
     await handleHardworkPlanSelect(interaction, jobId, planIndex);
+  } else if (action === "select_revision" && jobIdStr) {
+    const jobId = parseInt(jobIdStr);
+    if (isNaN(jobId)) {
+      await interaction.reply({ content: ":x: Invalid job ID", ephemeral: true });
+      return;
+    }
+    const revNum = parseInt(interaction.values[0]!);
+    if (isNaN(revNum)) {
+      await interaction.reply({ content: ":x: Invalid revision number", ephemeral: true });
+      return;
+    }
+    await handleRevisionSelected(interaction, jobId, revNum);
   }
+}
+
+async function handleHistoryButton(interaction: ButtonInteraction, jobId: number) {
+  const revisions = await prisma.planRevision.findMany({
+    where: { jobId },
+    orderBy: { revisionNumber: "desc" },
+  });
+
+  if (revisions.length === 0) {
+    await interaction.reply({ content: "No revisions found for this job.", ephemeral: true });
+    return;
+  }
+
+  const options = revisions.map((rev) => {
+    const timeAgo = formatTimeAgo(rev.createdAt);
+    const label = `v${rev.revisionNumber} — ${rev.source} (${timeAgo})`.slice(0, 100);
+    const description = rev.planMd.replace(/#/g, "").trim().slice(0, 90) || "No preview available";
+    return {
+      label,
+      value: String(rev.revisionNumber),
+      description,
+    };
+  });
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId(`select_revision:${jobId}`)
+    .setPlaceholder("Select a revision to view...")
+    .addOptions(options.slice(0, 25)); // Discord max 25 options per select
+
+  const cancelRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+  // If the interaction hasn't been replied to yet, reply; otherwise update
+  if (interaction.replied || interaction.deferred) {
+    await interaction.editReply({ content: "📜 **Revision History** — Select a revision to preview:", components: [cancelRow] });
+  } else {
+    await interaction.update({ content: "📜 **Revision History** — Select a revision to preview:", components: [cancelRow], embeds: [] });
+  }
+}
+
+async function handleRevisionSelected(interaction: StringSelectMenuInteraction, jobId: number, revNum: number) {
+  const revision = await prisma.planRevision.findUnique({
+    where: { jobId_revisionNumber: { jobId, revisionNumber: revNum } },
+  });
+  if (!revision) {
+    await interaction.update({ content: ":x: Revision not found", components: [], embeds: [] });
+    return;
+  }
+
+  const timeAgo = formatTimeAgo(revision.createdAt);
+  const preview = revision.planMd.slice(0, 1500) + (revision.planMd.length > 1500 ? "\n\n*... (truncated)*" : "");
+
+  const embed = new EmbedBuilder()
+    .setTitle(`📜 Revision v${revision.revisionNumber}`)
+    .setDescription(preview)
+    .addFields(
+      { name: "Source", value: revision.source, inline: true },
+      { name: "Created", value: timeAgo, inline: true },
+    )
+    .setColor(0x5865f2);
+
+  const restoreButton = new ButtonBuilder()
+    .setCustomId(`restore_revision:${jobId}:${revNum}`)
+    .setLabel(`Restore v${revNum}`)
+    .setStyle(ButtonStyle.Primary);
+
+  const backButton = new ButtonBuilder()
+    .setCustomId(`back_current:${jobId}`)
+    .setLabel("Back to current")
+    .setStyle(ButtonStyle.Secondary);
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(restoreButton, backButton);
+
+  await interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function handleRestoreRevision(interaction: ButtonInteraction, jobId: number, revNum: number) {
+  const revision = await prisma.planRevision.findUnique({
+    where: { jobId_revisionNumber: { jobId, revisionNumber: revNum } },
+  });
+  if (!revision) {
+    await interaction.update({ content: ":x: Revision not found", components: [], embeds: [] });
+    return;
+  }
+
+  const token = crypto.randomUUID();
+
+  // Update job planMd and token
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      planMd: revision.planMd,
+      planEditToken: token,
+    },
+  });
+
+  // Save a restore revision entry
+  const lastRev = await prisma.planRevision.findFirst({
+    where: { jobId },
+    orderBy: { revisionNumber: "desc" },
+  });
+  await prisma.planRevision.create({
+    data: {
+      jobId,
+      revisionNumber: (lastRev?.revisionNumber ?? 0) + 1,
+      planMd: revision.planMd,
+      source: "restored",
+    },
+  }).catch(() => {});
+
+  await interaction.update({
+    content: `✅ Restored to revision v${revNum} from ${formatTimeAgo(revision.createdAt)}! The plan viewer now shows this version.`,
+    components: [],
+    embeds: [],
+  });
+}
+
+async function handleBackToCurrent(interaction: ButtonInteraction, jobId: number) {
+  const job = await prisma.job.findUnique({ where: { id: jobId } });
+  if (!job) {
+    await interaction.update({ content: ":x: Job not found", components: [], embeds: [] });
+    return;
+  }
+
+  // Re-post the original plan embed by calling postPlan
+  await postPlan(
+    { id: job.id, threadId: job.threadId, autoMode: job.autoMode, reporterId: job.reporterId },
+    job.planMd ?? "",
+  );
+
+  await interaction.update({
+    content: "↩ Returned to the current plan.",
+    components: [],
+    embeds: [],
+  });
+}
+
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }

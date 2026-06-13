@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { initTRPC } from "@trpc/server";
 import {
   PollNextJobInput,
@@ -28,6 +29,11 @@ import {
   HardworkPlansReadyInput,
   ConfirmHardworkPlanInput,
   WaitForSelectionOutput,
+  SavePlanRevisionInput,
+  GetPlanRevisionsInput,
+  GetPlanRevisionsOutput,
+  RestorePlanRevisionInput,
+  SetWorktreePathInput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
 import { postToThread, postToThreadWithComponents, editMessage, fetchLastMessage, renameThread, discordFetch, closeThreadForJob } from "../discord/helpers";
@@ -55,6 +61,7 @@ function toJobOutput(job: Job) {
     threadId: job.threadId,
     repoSlug: job.repoSlug,
     repoPath: job.repoPath,
+    worktreePath: job.worktreePath ?? null,
     kind: job.kind,
     status: job.status,
     context: job.context,
@@ -169,6 +176,11 @@ export const appRouter = t.router({
         return { success: false };
       }
 
+      // Determine revision source: if planMd already existed, it's a suggestion revision
+      const hadExistingPlan = !!job.planMd;
+      const hadPendingSuggestion = !!job.pendingSuggestion;
+      const source = hadExistingPlan && hadPendingSuggestion ? "suggestion" : "agent";
+
       const updated = await prisma.job.update({
         where: { id: input.jobId },
         data: {
@@ -177,6 +189,20 @@ export const appRouter = t.router({
           opencodeSessionId: input.sessionId,
         },
       });
+
+      // Auto-save a revision record
+      const lastRev = await prisma.planRevision.findFirst({
+        where: { jobId: input.jobId },
+        orderBy: { revisionNumber: "desc" },
+      });
+      await prisma.planRevision.create({
+        data: {
+          jobId: input.jobId,
+          revisionNumber: (lastRev?.revisionNumber ?? 0) + 1,
+          planMd: input.planMd,
+          source,
+        },
+      }).catch(() => {});
 
       return await postPlan(toJobOutput(updated), input.planMd);
     }),
@@ -528,6 +554,20 @@ export const appRouter = t.router({
         },
       });
 
+      // Auto-save a revision for the selected hardwork plan
+      const lastRev = await prisma.planRevision.findFirst({
+        where: { jobId: input.jobId },
+        orderBy: { revisionNumber: "desc" },
+      });
+      await prisma.planRevision.create({
+        data: {
+          jobId: input.jobId,
+          revisionNumber: (lastRev?.revisionNumber ?? 0) + 1,
+          planMd: selected.planMd,
+          source: "hardwork",
+        },
+      }).catch(() => {});
+
       return { success: true };
     }),
 
@@ -569,6 +609,85 @@ export const appRouter = t.router({
         },
       });
       return { released: result.count };
+    }),
+
+  savePlanRevision: t.procedure
+    .input(SavePlanRevisionInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const last = await prisma.planRevision.findFirst({
+        where: { jobId: input.jobId },
+        orderBy: { revisionNumber: "desc" },
+      });
+      const revisionNumber = (last?.revisionNumber ?? 0) + 1;
+      await prisma.planRevision.create({
+        data: {
+          jobId: input.jobId,
+          revisionNumber,
+          planMd: input.planMd,
+          source: input.source,
+        },
+      });
+      return { success: true };
+    }),
+
+  getPlanRevisions: t.procedure
+    .input(GetPlanRevisionsInput)
+    .output(GetPlanRevisionsOutput)
+    .query(async ({ input }) => {
+      const revisions = await prisma.planRevision.findMany({
+        where: { jobId: input.jobId },
+        orderBy: { revisionNumber: "desc" },
+      });
+      return { revisions };
+    }),
+
+  restorePlanRevision: t.procedure
+    .input(RestorePlanRevisionInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const revision = await prisma.planRevision.findUnique({
+        where: { jobId_revisionNumber: { jobId: input.jobId, revisionNumber: input.revisionNumber } },
+      });
+      if (!revision) return { success: false };
+
+      const token = crypto.randomUUID();
+
+      await prisma.job.update({
+        where: { id: input.jobId },
+        data: {
+          planMd: revision.planMd,
+          planEditToken: token,
+        },
+      });
+
+      // Save a revision entry recording the restore
+      const last = await prisma.planRevision.findFirst({
+        where: { jobId: input.jobId },
+        orderBy: { revisionNumber: "desc" },
+      });
+      const revisionNumber = (last?.revisionNumber ?? 0) + 1;
+      await prisma.planRevision.create({
+        data: {
+          jobId: input.jobId,
+          revisionNumber,
+          planMd: revision.planMd,
+          source: "restored",
+        },
+      });
+
+      return { success: true };
+    }),
+
+  setWorktreePath: t.procedure
+    .input(SetWorktreePathInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      await prisma.job.update({
+        where: { id: input.jobId },
+        data: { worktreePath: input.worktreePath },
+      });
+      return { success: true };
     }),
 });
 

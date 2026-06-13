@@ -42,6 +42,7 @@ export const JobSchema = z.object({
   threadId: z.string(),
   repoSlug: z.string(),
   repoPath: z.string(),
+  worktreePath: z.string().nullable(),
   kind: ReportKind,
   status: JobStatus,
   context: z.string().nullable(),
@@ -240,4 +241,37 @@ export const WaitForSelectionOutput = z.object({
   selected: z.boolean(),
   planMd: z.string().nullable(),
   planIndex: z.number().nullable(),
+});
+
+export const PlanRevisionSchema = z.object({
+  id: z.number(),
+  jobId: z.number(),
+  revisionNumber: z.number(),
+  planMd: z.string(),
+  source: z.string(),
+  createdAt: z.date(),
+});
+
+export const SavePlanRevisionInput = z.object({
+  jobId: z.number(),
+  planMd: z.string(),
+  source: z.string(),
+});
+
+export const GetPlanRevisionsInput = z.object({
+  jobId: z.number(),
+});
+
+export const GetPlanRevisionsOutput = z.object({
+  revisions: z.array(PlanRevisionSchema),
+});
+
+export const RestorePlanRevisionInput = z.object({
+  jobId: z.number(),
+  revisionNumber: z.number(),
+});
+
+export const SetWorktreePathInput = z.object({
+  jobId: z.number(),
+  worktreePath: z.string(),
 });
