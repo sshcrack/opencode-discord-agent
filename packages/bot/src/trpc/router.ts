@@ -34,6 +34,7 @@ import {
   GetPlanRevisionsOutput,
   RestorePlanRevisionInput,
   SetWorktreePathInput,
+  SetBranchInput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
 import { postToThread, postToThreadWithComponents, editMessage, fetchLastMessage, renameThread, discordFetch, closeThreadForJob } from "../discord/helpers";
@@ -120,10 +121,20 @@ export const appRouter = t.router({
       const pending = await prisma.job.findMany({
         where: { status: "pending" },
         orderBy: { createdAt: "asc" },
+        include: { thread: true },
       });
 
       const claimed = [];
       for (const job of pending) {
+        // Skip jobs whose thread has been closed — cancel them immediately
+        if (job.thread.closedAt) {
+          await prisma.job.update({
+            where: { id: job.id },
+            data: { status: "cancelled" },
+          });
+          continue;
+        }
+
         // Only one active job per thread — skip if this thread already has one
         const existingActive = await prisma.job.findFirst({
           where: {
@@ -484,6 +495,9 @@ export const appRouter = t.router({
       const parentJob = await prisma.job.findUnique({ where: { id: input.parentJobId } });
       if (!parentJob || !parentJob.prUrl) return { success: false };
 
+      const reportThread = await prisma.reportThread.findUnique({ where: { threadId: input.threadId } });
+      if (reportThread?.closedAt) return { success: false };
+
       await prisma.job.create({
         data: {
           threadId: input.threadId,
@@ -597,9 +611,9 @@ export const appRouter = t.router({
         data: {
           status: "pending",
           workerId: null,
-          planMd: null,
-          opencodeSessionId: null,
-          buildSessionId: null,
+          // Intentionally NOT clearing: planMd, opencodeSessionId, buildSessionId,
+          // hardworkPlans, selectedPlanIndex, branch, worktreePath — these are
+          // durable progress checkpoints used to resume correctly after a restart.
           pendingSuggestion: null,
           planEditToken: null,
           pendingQuestions: null,
@@ -686,6 +700,17 @@ export const appRouter = t.router({
       await prisma.job.update({
         where: { id: input.jobId },
         data: { worktreePath: input.worktreePath },
+      });
+      return { success: true };
+    }),
+
+  setBranch: t.procedure
+    .input(SetBranchInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      await prisma.job.update({
+        where: { id: input.jobId },
+        data: { branch: input.branch },
       });
       return { success: true };
     }),

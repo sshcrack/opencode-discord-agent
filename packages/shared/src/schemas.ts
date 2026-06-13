@@ -275,3 +275,8 @@ export const SetWorktreePathInput = z.object({
   jobId: z.number(),
   worktreePath: z.string(),
 });
+
+export const SetBranchInput = z.object({
+  jobId: z.number(),
+  branch: z.string(),
+});

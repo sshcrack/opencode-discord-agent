@@ -145,6 +145,12 @@ export async function handleButton(interaction: ButtonInteraction) {
       return;
     }
 
+    const reportThread = await prisma.reportThread.findUnique({ where: { threadId: parentJob.threadId } });
+    if (reportThread?.closedAt) {
+      await interaction.reply({ content: ":lock: This thread is closed — cannot create a new job", ephemeral: true });
+      return;
+    }
+
     const activeStatuses: Job["status"][] = ["pending", "claimed", "planning", "plan_ready", "approved", "building"];
     const existingActive = await prisma.job.findFirst({
       where: { threadId: parentJob.threadId, status: { in: activeStatuses } },

@@ -9,7 +9,7 @@ import { trackProcess } from "./processes";
 import { ensureWorktree, ensureFollowupWorktree, ensureReviewWorktree, cleanupWorktree, getRepoNameWithOwner, setupGitAuthor } from "./worktree";
 import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
-import { runHardworkFlow } from "./hardwork";
+import { runHardworkFlow, waitForHardworkSelection } from "./hardwork";
 import { waitForApproval } from "./approval";
 import { runBuildAgent, amendCoauthor } from "./build";
 import { runReviewAgent } from "./review";
@@ -113,27 +113,46 @@ async function handleJob(job: Job) {
       branch = result.branch;
       worktreePath = result.worktreePath;
     } else if (isFollowUp && followUpBranch) {
-      jobLog(job.id, "Step 1/5: Creating follow-up worktree from parent branch...");
-      await postInfo(job.id, "Creating worktree from parent branch...");
-      branch = `followup-${job.id}`;
+      // Reuse the branch name from a previous run if available — avoids "branch already exists"
+      branch = job.branch ?? `followup-${job.id}`;
+      const isResuming = !!job.branch;
+      if (isResuming) {
+        jobLog(job.id, `Step 1/5: Resuming follow-up worktree for branch ${branch}...`);
+        await postInfo(job.id, "Resuming worktree from previous run...");
+      } else {
+        jobLog(job.id, "Step 1/5: Creating follow-up worktree from parent branch...");
+        await postInfo(job.id, "Creating worktree from parent branch...");
+      }
       worktreePath = await ensureFollowupWorktree(repoPath, followUpBranch, branch, job.id);
-      jobLog(job.id, `Follow-up worktree created at ${worktreePath} on branch ${branch}`);
+      jobLog(job.id, `Follow-up worktree ready at ${worktreePath} on branch ${branch}`);
     } else {
-      jobLog(job.id, "Step 1/5: Creating worktree...");
-      await postInfo(job.id, "Creating worktree...");
-      branch = `report-${job.id}`;
+      // Reuse the branch name from a previous run if available — avoids "branch already exists"
+      branch = job.branch ?? `report-${job.id}`;
+      const isResuming = !!job.branch;
+      if (isResuming) {
+        jobLog(job.id, `Step 1/5: Resuming worktree for branch ${branch}...`);
+        await postInfo(job.id, "Resuming worktree from previous run...");
+      } else {
+        jobLog(job.id, "Step 1/5: Creating worktree...");
+        await postInfo(job.id, "Creating worktree...");
+      }
       const stepStart = performance.now();
       worktreePath = await ensureWorktree(repoPath, branch, job.id);
-      jobLog(job.id, `Worktree created at ${worktreePath} (${(performance.now() - stepStart).toFixed(0)}ms)`);
+      jobLog(job.id, `Worktree ready at ${worktreePath} (${(performance.now() - stepStart).toFixed(0)}ms)`);
     }
 
     if (!dryRun) {
       await postDebug(job.id, `Worktree: \`${worktreePath}\` on branch \`${branch}\``);
     }
 
-    // Persist worktree path for recovery across restarts
+    // Persist worktree path and branch immediately so restarts can resume correctly
     try {
       await client.setWorktreePath.mutate({ jobId: job.id, worktreePath });
+    } catch {
+      // non-critical — retried on next handleJob if needed
+    }
+    try {
+      await client.setBranch.mutate({ jobId: job.id, branch });
     } catch {
       // non-critical — retried on next handleJob if needed
     }
@@ -387,26 +406,52 @@ if (cmd === "ask") {
       jobLog(job.id, "Follow-up job — skipping planning phase, resuming build session");
       await postInfo(job.id, "Continuing previous session...");
     } else if (job.hardwork) {
-      jobLog(job.id, `Step 3/5: Running hardwork flow with ${job.parallelPlanCount} parallel plan agents...`);
-      await postInfo(job.id, `Hardwork planning started — running ${job.parallelPlanCount} parallel plan agents...`);
+      // ── Three-way hardwork resume checkpoint ────────────────────────────
+      // 1. Plans drafted AND user already selected one → skip straight to build
+      // 2. Plans drafted but no selection yet → wait for user to pick (skip re-planning)
+      // 3. No plans at all → run the full parallel planning flow from scratch
 
-      const hwResult = await runHardworkFlow(job, worktreePath, issueNumber, helperPath);
-      if (hwResult === null) {
-        cleanupWorktree(repoPath, branch).catch(() => {});
-        cleanupHelper(helperPath);
-        return;
-      }
-      finalSessionId = hwResult.sessionId;
+      if (job.hardworkPlans && job.selectedPlanIndex !== null && job.planMd) {
+        // Checkpoint 1: plan selected — skip all planning, go straight to build
+        jobLog(job.id, `Resuming hardwork job — plan #${job.selectedPlanIndex} already selected, skipping to build`);
+        await postInfo(job.id, `Resuming — plan already selected, starting build agent...`);
+        finalSessionId = job.opencodeSessionId ?? undefined;
+      } else if (job.hardworkPlans && job.planMd) {
+        // Checkpoint 2: plans drafted, waiting for user selection
+        jobLog(job.id, `Resuming hardwork job — plans already drafted, waiting for user selection`);
+        await postInfo(job.id, `Resuming — plans already ready, waiting for your selection...`);
+        finalSessionId = job.opencodeSessionId ?? undefined;
 
-      if (job.autoMode) {
-        jobLog(job.id, `Auto mode — synthesized plan posted for auto-approval`);
-        finalSessionId = await waitForApproval(job.id, hwResult.sessionId, worktreePath, job, helperPath);
+        if (!job.autoMode) {
+          const hwResult = await waitForHardworkSelection(job.id);
+          if (hwResult === null) {
+            cleanupWorktree(repoPath, branch).catch(() => {});
+            cleanupHelper(helperPath);
+            return;
+          }
+          finalSessionId = hwResult.sessionId || finalSessionId;
+        }
+
+        // After selection (or auto mode), run through approval
+        finalSessionId = await waitForApproval(job.id, finalSessionId ?? "", worktreePath, job, helperPath);
         if (finalSessionId === null) {
           cleanupWorktree(repoPath, branch).catch(() => {});
           cleanupHelper(helperPath);
           return;
         }
       } else {
+        // Checkpoint 3: fresh run — no plans yet
+        jobLog(job.id, `Step 3/5: Running hardwork flow with ${job.parallelPlanCount} parallel plan agents...`);
+        await postInfo(job.id, `Hardwork planning started — running ${job.parallelPlanCount} parallel plan agents...`);
+
+        const hwResult = await runHardworkFlow(job, worktreePath, issueNumber, helperPath);
+        if (hwResult === null) {
+          cleanupWorktree(repoPath, branch).catch(() => {});
+          cleanupHelper(helperPath);
+          return;
+        }
+        finalSessionId = hwResult.sessionId;
+
         finalSessionId = await waitForApproval(job.id, hwResult.sessionId, worktreePath, job, helperPath);
         if (finalSessionId === null) {
           cleanupWorktree(repoPath, branch).catch(() => {});
@@ -415,6 +460,41 @@ if (cmd === "ask") {
         }
       }
     } else if (!job.quickMode) {
+      // ── Plan resume checkpoint ───────────────────────────────────────────
+      // If planMd is already in the DB (from a previous run), skip re-running
+      // the plan agent and go straight to the approval loop with the saved session.
+      if (job.planMd && job.opencodeSessionId) {
+        jobLog(job.id, `Resuming: plan already drafted (session ${job.opencodeSessionId}), skipping plan agent`);
+        await postInfo(job.id, "Resuming — plan already drafted, waiting for approval...");
+
+        // Re-post the plan to Discord so the user can see and approve it again
+        const planResult = await client.planReady.mutate({
+          jobId: job.id,
+          planMd: job.planMd,
+          sessionId: job.opencodeSessionId,
+        });
+        if (!planResult.success) {
+          jobLog(job.id, `Plan re-post failed — thread may have been deleted, aborting`);
+          await client.postStatus.mutate({
+            jobId: job.id,
+            message: "Plan could not be re-posted — Discord thread may have been deleted",
+            level: "error",
+          });
+          return;
+        }
+
+        // ── Step 4: Approval loop ──────────────────────────────────────────
+        jobLog(job.id, "Step 4/5: Waiting for approval (resumed)...");
+        finalSessionId = await waitForApproval(job.id, job.opencodeSessionId, worktreePath, job, helperPath);
+        if (finalSessionId === null) {
+          jobLog(job.id, "Job was cancelled by user");
+          await client.postStatus.mutate({ jobId: job.id, message: "Job cancelled", level: "error" });
+          cleanupWorktree(repoPath, branch).catch(() => {});
+          cleanupHelper(helperPath);
+          return;
+        }
+        jobLog(job.id, `Approval received, session: ${finalSessionId}`);
+      } else {
       jobLog(job.id, "Step 3/5: Running plan agent...");
       await postInfo(job.id, "Planning started — running opencode plan agent...");
 
@@ -482,6 +562,7 @@ if (cmd === "ask") {
         return;
       }
       jobLog(job.id, `Approval received, session: ${finalSessionId}`);
+      } // end fresh plan branch
     } else {
       await postInfo(job.id, "Quick mode — skipping planning phase");
     }

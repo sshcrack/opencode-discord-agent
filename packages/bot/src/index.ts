@@ -196,9 +196,9 @@ client.once(Events.ClientReady, async (c) => {
           data: {
             status: "pending",
             workerId: null,
-            planMd: null,
-            opencodeSessionId: null,
-            buildSessionId: null,
+            // Intentionally NOT clearing: planMd, opencodeSessionId, buildSessionId,
+            // hardworkPlans, selectedPlanIndex, branch, worktreePath — these are
+            // durable progress checkpoints used to resume correctly after a restart.
             pendingSuggestion: null,
             planEditToken: null,
             pendingQuestions: null,

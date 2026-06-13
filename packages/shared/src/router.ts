@@ -33,6 +33,7 @@ import {
   GetPlanRevisionsOutput,
   RestorePlanRevisionInput,
   SetWorktreePathInput,
+  SetBranchInput,
 } from "./schemas";
 
 const t = initTRPC.create();
@@ -214,6 +215,13 @@ export const appRouter = t.router({
 
   setWorktreePath: t.procedure
     .input(SetWorktreePathInput)
+    .output(StatusResult)
+    .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  setBranch: t.procedure
+    .input(SetBranchInput)
     .output(StatusResult)
     .mutation(async () => {
       throw new Error("Not implemented in shared package");
