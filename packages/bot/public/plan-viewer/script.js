@@ -65,7 +65,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const SCROLL_SYNC_DELAY = 10;
 
   // View Mode State - Story 1.1
-  let currentViewMode = 'split'; // 'editor', 'split', or 'preview'
+  var isMobileViewport = window.innerWidth < 1080;
+  let currentViewMode = isMobileViewport ? 'preview' : 'split'; // 'editor', 'split', or 'preview'
   const APP_VERSION = '3.7.3';
   let activeModal = null;
   let lastFocusedElement = null;
@@ -9293,12 +9294,13 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         var current = markdownEditor.value;
         var editorDisabled = markdownEditor.disabled;
+        var serverContentChanged = data.planMd !== _planLastContent && _planLastContent !== null;
         if (data.planMd !== current) {
           if (editorDisabled || current === '') {
             markdownEditor.value = data.planMd;
             renderMarkdown({ reason: 'plan-load' });
             saveCurrentTabState();
-          } else {
+          } else if (serverContentChanged) {
             showPlanToast('📋 New plan version available — refresh to update');
           }
         }
