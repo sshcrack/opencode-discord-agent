@@ -25,10 +25,14 @@ import {
   ReleaseWorkerJobsOutput,
   CreateReviewMergeJobInput,
   CloseJobThreadInput,
+  HardworkPlansReadyInput,
+  ConfirmHardworkPlanInput,
+  WaitForSelectionOutput,
 } from "@opencode-discord/shared";
 import { prisma } from "../db";
 import { postToThread, postToThreadWithComponents, editMessage, fetchLastMessage, renameThread, discordFetch, closeThreadForJob } from "../discord/helpers";
 import { postPlan } from "../discord/plan";
+import { postHardworkPlans } from "../discord/hardwork";
 import { showNextQuestion, formatQaBlock } from "../discord/questions";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import type { Job } from "../db/generated/client";
@@ -65,6 +69,10 @@ function toJobOutput(job: Job) {
     parentJobId: job.parentJobId,
     autoMode: job.autoMode,
     quickMode: job.quickMode,
+    hardwork: job.hardwork,
+    parallelPlanCount: job.parallelPlanCount,
+    hardworkPlans: job.hardworkPlans ?? null,
+    selectedPlanIndex: job.selectedPlanIndex ?? null,
     pendingSuggestion: job.pendingSuggestion,
     planEditToken: job.planEditToken ?? null,
     pendingQuestions: job.pendingQuestions ?? null,
@@ -464,6 +472,77 @@ export const appRouter = t.router({
       });
 
       return { success: true };
+    }),
+
+  hardworkPlansReady: t.procedure
+    .input(HardworkPlansReadyInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const job = await prisma.job.findUnique({ where: { id: input.jobId } });
+      if (!job) return { success: false };
+
+      const updated = await prisma.job.update({
+        where: { id: input.jobId },
+        data: {
+          status: "plan_ready",
+          hardworkPlans: JSON.stringify(input.plans),
+          planMd: input.synthesizedPlanMd,
+          opencodeSessionId: input.sessionId,
+        },
+      });
+
+      if (updated.autoMode) {
+        return await postPlan(toJobOutput(updated), input.synthesizedPlanMd);
+      }
+
+      await postHardworkPlans(toJobOutput(updated), input.plans, input.synthesizedPlanMd);
+      return { success: true };
+    }),
+
+  confirmHardworkPlan: t.procedure
+    .input(ConfirmHardworkPlanInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const job = await prisma.job.findUnique({ where: { id: input.jobId } });
+      if (!job) return { success: false };
+
+      if (job.status !== "plan_ready" || !job.hardwork) {
+        return { success: false };
+      }
+
+      let plans: { index: number; planMd: string; label: string }[] = [];
+      try {
+        plans = JSON.parse(job.hardworkPlans ?? "[]");
+      } catch {
+        return { success: false };
+      }
+
+      const selected = plans.find(p => p.index === input.planIndex);
+      if (!selected) return { success: false };
+
+      await prisma.job.update({
+        where: { id: input.jobId },
+        data: {
+          selectedPlanIndex: input.planIndex,
+          planMd: selected.planMd,
+        },
+      });
+
+      return { success: true };
+    }),
+
+  waitForHardworkSelection: t.procedure
+    .input(GetJobStatusInput)
+    .output(WaitForSelectionOutput)
+    .query(async ({ input }) => {
+      const job = await prisma.job.findUnique({ where: { id: input.jobId } });
+      if (!job) return { selected: false, planMd: null, planIndex: null };
+
+      return {
+        selected: job.selectedPlanIndex !== null,
+        planMd: job.planMd,
+        planIndex: job.selectedPlanIndex,
+      };
     }),
 
   releaseWorkerJobs: t.procedure

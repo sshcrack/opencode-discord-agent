@@ -9,6 +9,7 @@ import { trackProcess } from "./processes";
 import { ensureWorktree, ensureFollowupWorktree, ensureReviewWorktree, cleanupWorktree, getRepoNameWithOwner, setupGitAuthor } from "./worktree";
 import { generateIssue } from "./issue";
 import { runPlanAgent } from "./plan";
+import { runHardworkFlow } from "./hardwork";
 import { waitForApproval } from "./approval";
 import { runBuildAgent, amendCoauthor } from "./build";
 import { runReviewAgent } from "./review";
@@ -378,6 +379,34 @@ if (cmd === "ask") {
     if (isFollowUp) {
       jobLog(job.id, "Follow-up job — skipping planning phase, resuming build session");
       await postInfo(job.id, "Continuing previous session...");
+    } else if (job.hardwork) {
+      jobLog(job.id, `Step 3/5: Running hardwork flow with ${job.parallelPlanCount} parallel plan agents...`);
+      await postInfo(job.id, `Hardwork planning started — running ${job.parallelPlanCount} parallel plan agents...`);
+
+      const hwResult = await runHardworkFlow(job, worktreePath, issueNumber, helperPath);
+      if (hwResult === null) {
+        cleanupWorktree(repoPath, branch).catch(() => {});
+        cleanupHelper(helperPath);
+        return;
+      }
+      finalSessionId = hwResult.sessionId;
+
+      if (job.autoMode) {
+        jobLog(job.id, `Auto mode — synthesized plan posted for auto-approval`);
+        finalSessionId = await waitForApproval(job.id, hwResult.sessionId, worktreePath, job, helperPath);
+        if (finalSessionId === null) {
+          cleanupWorktree(repoPath, branch).catch(() => {});
+          cleanupHelper(helperPath);
+          return;
+        }
+      } else {
+        finalSessionId = await waitForApproval(job.id, hwResult.sessionId, worktreePath, job, helperPath);
+        if (finalSessionId === null) {
+          cleanupWorktree(repoPath, branch).catch(() => {});
+          cleanupHelper(helperPath);
+          return;
+        }
+      }
     } else if (!job.quickMode) {
       jobLog(job.id, "Step 3/5: Running plan agent...");
       await postInfo(job.id, "Planning started — running opencode plan agent...");
@@ -459,10 +488,15 @@ if (cmd === "ask") {
     }
 
     const buildStart = performance.now();
+    const planFileName = job.hardwork
+      ? `plan-synthesis-${job.id}.md`
+      : `plan-${job.id}-${job.repoSlug.replace(/[^a-zA-Z0-9]/g, "-")}.md`;
+    const planFilePath = path.join(worktreePath, ".opencode", "plans", planFileName);
     const buildResult = await runBuildAgent(
       job, worktreePath, issueNumber, branch, helperPath,
       job.autoMode, job.quickMode,
       isFollowUp ? followUpSession : null,
+      planFilePath,
     );
     jobLog(job.id, `Build agent completed in ${(performance.now() - buildStart).toFixed(0)}ms`);
 

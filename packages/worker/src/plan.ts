@@ -10,6 +10,7 @@ async function runPlanAgent(
   worktreePath: string,
   issueNumber: number | null,
   helperPath: string,
+  planLabel?: string,
 ): Promise<{ planMd: string; sessionId: string }> {
   const issueRef = issueNumber ? ` The related GitHub issue is #${issueNumber}.` : "";
   const contextBlock = job.context
@@ -17,7 +18,8 @@ async function runPlanAgent(
     : "";
 
   const planDir = path.join(worktreePath, ".opencode", "plans");
-  const planFileName = `plan-${job.id}-${job.repoSlug.replace(/[^a-zA-Z0-9]/g, "-")}.md`;
+  const suffix = planLabel ?? `${job.id}-${job.repoSlug.replace(/[^a-zA-Z0-9]/g, "-")}`;
+  const planFileName = `plan-${suffix}.md`;
   const planFilePath = path.join(planDir, planFileName);
 
   const writeInstruction = `Write the plan to \`${planFilePath}\` (create the directory if it doesn't exist).`;

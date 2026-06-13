@@ -68,6 +68,10 @@ model Job {
   parentJobId       Int?
   autoMode          Boolean    @default(false)
   quickMode         Boolean    @default(false)
+  hardwork          Boolean    @default(false)
+  parallelPlanCount Int        @default(3)
+  hardworkPlans     String?
+  selectedPlanIndex Int?
   pendingSuggestion    String?
   planEditToken        String?
   statusMessageId      String?

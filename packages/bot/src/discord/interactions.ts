@@ -1,8 +1,9 @@
-import { AutocompleteInteraction, ButtonInteraction, Message } from "discord.js";
+import { AutocompleteInteraction, ButtonInteraction, StringSelectMenuInteraction, Message } from "discord.js";
 import { prisma } from "../db";
 import type { Job } from "../db/generated/client";
 import { botLog, botError } from "../logging";
 import { closeThreadForJob, parsePrUrl, postToThread } from "./helpers";
+import { handleHardworkPlanSelect, handleHardworkPlanConfirm } from "./hardwork";
 
 
 export async function handleAutocomplete(interaction: AutocompleteInteraction) {
@@ -37,6 +38,26 @@ export async function handleButton(interaction: ButtonInteraction) {
     await interaction.reply({ content: ":x: Invalid custom ID", ephemeral: true });
     return;
   }
+
+  // cancel:hw:{jobId} has a non-numeric second segment, handle before jobId parse
+  if (action === "cancel" && jobIdStr === "hw") {
+    const jobIdHw = parseInt(parts[2]!);
+    if (isNaN(jobIdHw)) {
+      await interaction.reply({ content: ":x: Invalid job ID", ephemeral: true });
+      return;
+    }
+    const result = await prisma.job.updateMany({
+      where: { id: jobIdHw, status: { in: ["plan_ready", "planning"] } },
+      data: { status: "cancelled" },
+    });
+    await interaction.update({
+      content: result.count > 0 ? "❌ Job cancelled" : ":x: Job is no longer in a cancellable state",
+      components: [],
+      embeds: [],
+    });
+    return;
+  }
+
   const jobId = parseInt(jobIdStr);
   if (isNaN(jobId)) {
     await interaction.reply({ content: ":x: Invalid job ID", ephemeral: true });
@@ -177,5 +198,38 @@ export async function handleButton(interaction: ButtonInteraction) {
       botError(`[Merge now] Error merging PR for job #${jobId}:`, err);
       await interaction.editReply({ content: `❌ Error merging PR: ${err}` });
     }
+  } else if (action === "confirm_plan") {
+    const jobIdVal = parseInt(parts[1]!);
+    const planIndex = parseInt(parts[2]!);
+    if (isNaN(jobIdVal) || isNaN(planIndex)) {
+      await interaction.reply({ content: ":x: Invalid custom ID", ephemeral: true });
+      return;
+    }
+    await handleHardworkPlanConfirm(interaction, jobIdVal, planIndex);
+  } else if (action === "go_back_plans") {
+    await interaction.update({ content: "↩ Select a plan from the dropdown above", components: [], embeds: [] });
+  }
+}
+
+export async function handleSelectMenu(interaction: StringSelectMenuInteraction) {
+  if (!interaction.channel || !interaction.channel.isThread()) return;
+
+  botLog("[handleSelectMenu] customId:", interaction.customId, "user:", interaction.user.tag);
+  const parts = interaction.customId.split(":");
+  const action = parts[0];
+  const jobIdStr = parts[1];
+
+  if (action === "select_plan" && jobIdStr) {
+    const jobId = parseInt(jobIdStr);
+    if (isNaN(jobId)) {
+      await interaction.reply({ content: ":x: Invalid job ID", ephemeral: true });
+      return;
+    }
+    const planIndex = parseInt(interaction.values[0]!);
+    if (isNaN(planIndex)) {
+      await interaction.reply({ content: ":x: Invalid plan index", ephemeral: true });
+      return;
+    }
+    await handleHardworkPlanSelect(interaction, jobId, planIndex);
   }
 }
