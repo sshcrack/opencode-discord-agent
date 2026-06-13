@@ -54,7 +54,9 @@ If you do NOT have questions, ${writeInstruction.toLowerCase()} Always provide o
     `Review the codebase and write a detailed implementation plan.`,
     `The plan will be displayed in a full-featured Markdown viewer that supports Mermaid diagrams, mathematical equations (LaTeX), code blocks with syntax highlighting, tables, task lists, and all other GitHub-flavored Markdown features. Use these liberally to make the plan clear and well-structured.`,
     `The plan should cover: files to change, approach, and any risk areas.`,
-    job.autoMode ? writeInstruction : "",
+    // Always write the file when Discord interaction is disabled (parallel hardwork agents),
+    // or when autoMode is on. In interactive mode the ask block tells the agent what to do.
+    (job.autoMode || !discordAllowed) ? writeInstruction : "",
     contextBlock,
     helperBlock,
   ].filter(Boolean).join(" ");
