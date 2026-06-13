@@ -22,12 +22,10 @@ export async function postPlan(
 
   const botUrl = (process.env.BOT_URL || "http://localhost:3000").replace(/\/+$/, "");
   const planUrl = `${botUrl}/plan-viewer/?jobId=${job.id}&token=${token}`;
-  const ping = job.reporterId ? `<@${job.reporterId}> ` : "";
-
   const embed = new EmbedBuilder()
     .setTitle("📋 Planning Complete")
     .setDescription(
-      `${ping}📝 [Open and edit the plan](${planUrl})\n` +
+      `📝 [Open and edit the plan](${planUrl})\n` +
       `After editing, submit the updated plan using the link above, or use the buttons below.`
     )
     .setColor(0x5865f2);
@@ -49,6 +47,9 @@ export async function postPlan(
         .setStyle(ButtonStyle.Danger),
     );
 
+    if (job.reporterId) {
+      await ch.send({ content: `<@${job.reporterId}>` });
+    }
     await ch.send({ embeds: [embed], components: [cancelRow] });
     const countdownMsg = await ch.send("⏳ Auto-approving in **10** seconds... (click Cancel to abort)");
 
@@ -92,6 +93,9 @@ export async function postPlan(
       .setStyle(ButtonStyle.Danger),
   );
 
+  if (job.reporterId) {
+    await ch.send({ content: `<@${job.reporterId}>` });
+  }
   await ch.send({ embeds: [embed], components: [row] });
 
   return { success: true };
