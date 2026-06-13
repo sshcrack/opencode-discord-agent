@@ -26,6 +26,7 @@ import {
   CreateReviewMergeJobInput,
   CloseJobThreadInput,
   HardworkPlansReadyInput,
+  HardworkPlanProgressInput,
   ConfirmHardworkPlanInput,
   WaitForSelectionOutput,
   SavePlanRevisionInput,
@@ -173,6 +174,13 @@ export const appRouter = t.router({
 
   hardworkPlansReady: t.procedure
     .input(HardworkPlansReadyInput)
+    .output(StatusResult)
+    .mutation(async () => {
+      throw new Error("Not implemented in shared package");
+    }),
+
+  hardworkPlanProgress: t.procedure
+    .input(HardworkPlanProgressInput)
     .output(StatusResult)
     .mutation(async () => {
       throw new Error("Not implemented in shared package");

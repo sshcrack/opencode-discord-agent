@@ -27,6 +27,7 @@ import {
   CreateReviewMergeJobInput,
   CloseJobThreadInput,
   HardworkPlansReadyInput,
+  HardworkPlanProgressInput,
   ConfirmHardworkPlanInput,
   WaitForSelectionOutput,
   SavePlanRevisionInput,
@@ -80,6 +81,7 @@ function toJobOutput(job: Job) {
     hardwork: job.hardwork,
     parallelPlanCount: job.parallelPlanCount,
     hardworkPlans: job.hardworkPlans ?? null,
+    hardworkIndividualPlans: job.hardworkIndividualPlans ?? null,
     selectedPlanIndex: job.selectedPlanIndex ?? null,
     pendingSuggestion: job.pendingSuggestion,
     planEditToken: job.planEditToken ?? null,
@@ -514,6 +516,35 @@ export const appRouter = t.router({
       return { success: true };
     }),
 
+  // Persists a single completed parallel plan-agent result as soon as it
+  // finishes, so a worker restart mid-hardwork-flow doesn't lose completed
+  // work and doesn't have to re-run agents that already succeeded.
+  hardworkPlanProgress: t.procedure
+    .input(HardworkPlanProgressInput)
+    .output(StatusResult)
+    .mutation(async ({ input }) => {
+      const job = await prisma.job.findUnique({ where: { id: input.jobId } });
+      if (!job) return { success: false };
+
+      let existing: { index: number; planMd: string; sessionId: string }[] = [];
+      try {
+        const parsed = JSON.parse(job.hardworkIndividualPlans ?? "[]");
+        if (Array.isArray(parsed)) existing = parsed;
+      } catch {
+        existing = [];
+      }
+
+      const withoutIndex = existing.filter(p => p.index !== input.index);
+      withoutIndex.push({ index: input.index, planMd: input.planMd, sessionId: input.sessionId });
+
+      await prisma.job.update({
+        where: { id: input.jobId },
+        data: { hardworkIndividualPlans: JSON.stringify(withoutIndex) },
+      });
+
+      return { success: true };
+    }),
+
   hardworkPlansReady: t.procedure
     .input(HardworkPlansReadyInput)
     .output(StatusResult)
@@ -612,8 +643,9 @@ export const appRouter = t.router({
           status: "pending",
           workerId: null,
           // Intentionally NOT clearing: planMd, opencodeSessionId, buildSessionId,
-          // hardworkPlans, selectedPlanIndex, branch, worktreePath — these are
-          // durable progress checkpoints used to resume correctly after a restart.
+          // hardworkPlans, hardworkIndividualPlans, selectedPlanIndex, branch,
+          // worktreePath — these are durable progress checkpoints used to
+          // resume correctly after a restart.
           pendingSuggestion: null,
           planEditToken: null,
           pendingQuestions: null,

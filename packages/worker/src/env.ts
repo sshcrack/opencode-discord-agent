@@ -9,6 +9,7 @@ const {
   GIT_BOT_EMAIL = "opencode-bot@users.noreply.github.com",
   GIT_COAUTHOR_NAME,
   GIT_COAUTHOR_EMAIL,
+  OPENCODE_STALL_TIMEOUT_MS,
   PATH: ENV_PATH = process.env.PATH ?? "",
 } = process.env;
 
@@ -21,6 +22,18 @@ const gitBotEmail = GIT_BOT_EMAIL;
 const gitCoauthorName = GIT_COAUTHOR_NAME || "";
 const gitCoauthorEmail = GIT_COAUTHOR_EMAIL || "";
 const hasCoauthor = !!(gitCoauthorName && gitCoauthorEmail);
+
+// How long an `opencode` subprocess may go without producing any stdout
+// events before the worker considers it stuck and kills it. This converts
+// a silent infinite hang (e.g. SQLite lock contention between parallel
+// `opencode run` processes sharing the same session DB, or a stuck
+// subagent/tool call) into a clean failure that can be retried, instead of
+// blocking the job — and the worker — forever.
+// Set to 0 to disable.
+const DEFAULT_OPENCODE_STALL_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const opencodeStallTimeoutMs = OPENCODE_STALL_TIMEOUT_MS !== undefined
+  ? Number.parseInt(OPENCODE_STALL_TIMEOUT_MS, 10) || 0
+  : DEFAULT_OPENCODE_STALL_TIMEOUT_MS;
 
 if (!SHARED_SECRET) throw new Error("SHARED_SECRET is required");
 
@@ -91,6 +104,7 @@ export {
   gitCoauthorName,
   gitCoauthorEmail,
   hasCoauthor,
+  opencodeStallTimeoutMs,
   AUGMENTED_PATH,
   REQUIRED_BINARIES,
   requireBinaries,

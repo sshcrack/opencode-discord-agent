@@ -1,4 +1,4 @@
-import { skipPermissionsArg, isENOENT, formatENOENT } from "./env";
+import { skipPermissionsArg, isENOENT, formatENOENT, opencodeStallTimeoutMs } from "./env";
 import { client } from "./trpc";
 import { jobLog } from "./logging";
 import { handleJsonEvent } from "./events";
@@ -67,6 +67,7 @@ async function runOpencodeStreaming(
   planFilePath: string | undefined,
   argv: string[],
   extraArgs: string[] = [],
+  opts: { env?: Record<string, string>; stallTimeoutMs?: number } = {},
 ): Promise<{ planMd: string; sessionId: string }> {
   const fullArgs = [...argv, "--format", "json", ...skipPermissionsArg, ...extraArgs];
   jobLog(jobId, `Spawning: ${fullArgs.join(" ")}`);
@@ -77,6 +78,7 @@ async function runOpencodeStreaming(
         cwd,
         stdout: "pipe",
         stderr: "pipe",
+        env: opts.env ? { ...process.env, ...opts.env } : undefined,
       }));
     } catch (err: unknown) {
       if (isENOENT(err)) {
@@ -99,6 +101,29 @@ async function runOpencodeStreaming(
 
   const stderrPromise = new Response(proc.stderr).text();
 
+  // ── Stall watchdog ────────────────────────────────────────────────────
+  // If the process produces no stdout activity for `stallTimeoutMs`, assume
+  // it's stuck (e.g. SQLite lock contention between concurrent `opencode run`
+  // processes, or a hung tool call) and kill it so the job fails cleanly
+  // instead of hanging forever.
+  const stallTimeoutMs = opts.stallTimeoutMs ?? opencodeStallTimeoutMs;
+  let lastActivity = performance.now();
+  let stalled = false;
+  const watchdog = stallTimeoutMs > 0
+    ? setInterval(() => {
+        const idleMs = performance.now() - lastActivity;
+        if (idleMs > stallTimeoutMs) {
+          stalled = true;
+          jobLog(jobId, `No opencode output for ${(idleMs / 1000).toFixed(0)}s — process appears stuck, killing it`);
+          try {
+            proc.kill(9);
+          } catch {
+            // already dead
+          }
+        }
+      }, Math.min(15_000, Math.max(5_000, Math.floor(stallTimeoutMs / 4))))
+    : null;
+
   async function flushAccumulator(forceNew: boolean = false): Promise<void> {
     if (acc.isEmpty) return;
     const combined = acc.flush();
@@ -115,6 +140,7 @@ async function runOpencodeStreaming(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      lastActivity = performance.now();
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
@@ -164,8 +190,14 @@ async function runOpencodeStreaming(
         await flushAccumulator();
       }
     }
+  } catch (err) {
+    // If the watchdog killed the process, reader.read() may reject instead
+    // of resolving with done:true — let the `stalled` check below produce
+    // the clearer error message in that case.
+    if (!stalled) throw err;
   } finally {
     reader.releaseLock();
+    if (watchdog) clearInterval(watchdog);
   }
 
   await flushAccumulator(true);
@@ -190,6 +222,15 @@ async function runOpencodeStreaming(
   const elapsed = (performance.now() - streamStart).toFixed(0);
   const [exitCode, stderr] = await Promise.all([proc.exited, stderrPromise]);
   jobLog(jobId, `opencode finished: exit ${exitCode}, ${lineCount} events in ${elapsed}ms`);
+
+  if (stalled) {
+    throw new Error(
+      `opencode process produced no output for ${(stallTimeoutMs / 1000).toFixed(0)}s and was killed. ` +
+      `This usually means it got stuck — common causes are SQLite lock contention between concurrent ` +
+      `'opencode run' processes sharing the same session database, or a hung tool call (e.g. reading a file). ` +
+      `Set OPENCODE_STALL_TIMEOUT_MS to adjust the threshold or 0 to disable.`,
+    );
+  }
 
   if (exitCode !== 0) {
     jobLog(jobId, `opencode stderr: ${stderr.slice(0, 500)}`);

@@ -60,6 +60,7 @@ export const JobSchema = z.object({
   hardwork: z.boolean(),
   parallelPlanCount: z.number(),
   hardworkPlans: z.string().nullable(),
+  hardworkIndividualPlans: z.string().nullable(),
   selectedPlanIndex: z.number().nullable(),
   pendingSuggestion: z.string().nullable(),
   planEditToken: z.string().nullish(),
@@ -223,6 +224,13 @@ export const HardworkPlanEntry = z.object({
   index: z.number(),
   planMd: z.string(),
   label: z.string(),
+});
+
+export const HardworkPlanProgressInput = z.object({
+  jobId: z.number(),
+  index: z.number(),
+  planMd: z.string(),
+  sessionId: z.string(),
 });
 
 export const HardworkPlansReadyInput = z.object({

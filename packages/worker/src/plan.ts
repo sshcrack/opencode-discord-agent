@@ -12,6 +12,7 @@ async function runPlanAgent(
   helperPath: string,
   planLabel?: string,
   discordAllowed: boolean = true,
+  extraEnv?: Record<string, string>,
 ): Promise<{ planMd: string; sessionId: string }> {
   const issueRef = issueNumber ? ` The related GitHub issue is #${issueNumber}.` : "";
   const contextBlock = job.context
@@ -72,7 +73,12 @@ If you do NOT have questions, ${writeInstruction.toLowerCase()} Always provide o
   }
 
   jobLog(job.id, `Starting opencode plan agent in ${worktreePath}`);
-  return runOpencodeStreaming(job.id, worktreePath, planFilePath, ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt]);
+  return runOpencodeStreaming(
+    job.id, worktreePath, planFilePath,
+    ["opencode", "run", "--agent", "plan", "--dir", worktreePath, prompt],
+    [],
+    extraEnv ? { env: extraEnv } : {},
+  );
 }
 
 export { runPlanAgent };
