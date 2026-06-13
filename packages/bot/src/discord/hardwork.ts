@@ -11,6 +11,7 @@ import {
 import { prisma } from "../db";
 import { discordFetch } from "./helpers";
 import { postPlan } from "./plan";
+import crypto from "node:crypto";
 
 interface PlanEntry {
   index: number;
@@ -82,10 +83,23 @@ export async function handleHardworkPlanSelect(
     return;
   }
 
+  // Generate token and set planMd so the plan viewer shows this plan
+  const token = crypto.randomUUID();
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      planMd: selected.planMd,
+      planEditToken: token,
+    },
+  });
+
+  const botUrl = (process.env.BOT_URL || "http://localhost:3000").replace(/\/+$/, "");
+  const planUrl = `${botUrl}/plan-viewer/?jobId=${jobId}&token=${token}`;
+
   const preview = selected.planMd.slice(0, 1500);
   const embed = new EmbedBuilder()
     .setTitle(`📋 ${selected.label}`)
-    .setDescription(preview || "(empty plan)")
+    .setDescription(`📝 [View full plan in editor](${planUrl})\n\n${preview || "(empty plan)"}`)
     .setColor(0x5865f2);
 
   const confirmBtn = new ButtonBuilder()
